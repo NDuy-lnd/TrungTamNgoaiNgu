@@ -1,20 +1,36 @@
-# Python
+# Frontend
+node_modules/
+dist/
+.vite/
+
+# Python Backend
 venv/
 .venv/
 __pycache__/
 *.pyc
+.pytest_cache/
 
-# Environment variables
+# Environment variables / Secrets
 .env
-
-# React / Node
-node_modules/
-dist/
+.env.*
+!.env.example
+*.pem
+*.key
 
 # IDE
 .vscode/
 .idea/
 
-# Operating System
+# System
 .DS_Store
 Thumbs.db
+
+# Logs
+*.log
+
+# Local databases
+*.sqlite3
+*.db
+
+# Uploaded files
+uploads/
