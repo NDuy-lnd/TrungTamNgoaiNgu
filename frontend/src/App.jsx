@@ -15,6 +15,7 @@ import StudentLayout from "./components/StudentLayout";
 
 import Login from "./pages/Login";
 
+
 // Admin
 import Dashboard from "./pages/admin/Dashboard";
 import HocVien from "./pages/admin/HocVien";
@@ -23,6 +24,7 @@ import KhoaHoc from "./pages/admin/KhoaHoc";
 import LopHoc from "./pages/admin/LopHoc";
 import LichHoc from "./pages/admin/LichHoc";
 import ThongKe from "./pages/admin/ThongKe";
+import RecoveryRequests from "./pages/admin/RecoveryRequests";
 
 // Giáo viên
 import TeacherHome from "./pages/teacher/TeacherHome";
@@ -58,6 +60,10 @@ export default function App() {
               <Route index element={<Dashboard />} />
               <Route path="hoc-vien" element={<HocVien />} />
               <Route path="giao-vien" element={<GiaoVien />} />
+              <Route
+                path="/yeu-cau-khoi-phuc"
+                element={<RecoveryRequests />}
+              />
               <Route path="khoa-hoc" element={<KhoaHoc />} />
               <Route path="lop-hoc" element={<LopHoc />} />
               <Route path="lich-hoc" element={<LichHoc />} />

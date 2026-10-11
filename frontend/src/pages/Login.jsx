@@ -1,6 +1,11 @@
 
 import { useState } from "react";
-import { useNavigate, Navigate } from "react-router-dom";
+import {
+  useNavigate,
+  Navigate,
+  Link,
+} from "react-router-dom";
+
 import {
   Card,
   Form,
@@ -8,13 +13,12 @@ import {
   Button,
   Typography,
   Alert,
-  Space
 } from "antd";
 
 import {
   UserOutlined,
   LockOutlined,
-  BookOutlined
+  BookOutlined,
 } from "@ant-design/icons";
 
 import { useAuth } from "../contexts/AuthContext";
@@ -23,8 +27,44 @@ import { roleHome } from "../components/ProtectedRoute";
 export default function Login() {
   const { user, login } = useAuth();
   const navigate = useNavigate();
-  const [error, setError] = useState("");
+
+  const [loginError, setLoginError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const handleLogin = async (values) => {
+    setLoginError("");
+    setLoading(true);
+
+    try {
+      const loggedInUser = await login(
+        values.username,
+        values.password
+      );
+
+      const destination =
+        roleHome[loggedInUser.role] || "/";
+
+      navigate(destination, { replace: true });
+    } catch (error) {
+      const status = error.response?.status;
+
+      if (status === 401) {
+        setLoginError(
+          "Tên đăng nhập hoặc mật khẩu không chính xác!"
+        );
+      } else if (status === 403) {
+        setLoginError(
+          "Tài khoản của bạn đã bị khóa!"
+        );
+      } else {
+        setLoginError(
+          "Không thể đăng nhập. Vui lòng thử lại sau."
+        );
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (user) {
     return (
@@ -35,29 +75,6 @@ export default function Login() {
     );
   }
 
-  const handleLogin = async (values) => {
-    setError("");
-    setLoading(true);
-
-    try {
-      const result = login(
-        values.username,
-        values.password
-      );
-
-      if (!result.success) {
-        setError(result.message);
-        return;
-      }
-
-      navigate(roleHome[result.user.role], {
-        replace: true
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div
       style={{
@@ -67,7 +84,7 @@ export default function Login() {
         justifyContent: "center",
         background:
           "linear-gradient(135deg, #0f172a 0%, #1d4ed8 100%)",
-        padding: 20
+        padding: 20,
       }}
     >
       <Card
@@ -75,14 +92,14 @@ export default function Login() {
           width: "100%",
           maxWidth: 430,
           borderRadius: 16,
-          boxShadow: "0 16px 50px rgba(0,0,0,0.2)"
+          boxShadow: "0 16px 50px rgba(0,0,0,0.2)",
         }}
         styles={{ body: { padding: 32 } }}
       >
         <div
           style={{
             textAlign: "center",
-            marginBottom: 28
+            marginBottom: 28,
           }}
         >
           <div
@@ -96,7 +113,7 @@ export default function Login() {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 32
+              fontSize: 32,
             }}
           >
             <BookOutlined />
@@ -111,18 +128,10 @@ export default function Login() {
           </Typography.Text>
         </div>
 
-        {error && (
-          <Alert
-            type="error"
-            showIcon
-            message={error}
-            style={{ marginBottom: 20 }}
-          />
-        )}
-
         <Form
           layout="vertical"
           onFinish={handleLogin}
+          onValuesChange={() => setLoginError("")}
           autoComplete="off"
           size="large"
         >
@@ -132,8 +141,8 @@ export default function Login() {
             rules={[
               {
                 required: true,
-                message: "Vui lòng nhập tên đăng nhập!"
-              }
+                message: "Vui lòng nhập tên đăng nhập!",
+              },
             ]}
           >
             <Input
@@ -148,8 +157,8 @@ export default function Login() {
             rules={[
               {
                 required: true,
-                message: "Vui lòng nhập mật khẩu!"
-              }
+                message: "Vui lòng nhập mật khẩu!",
+              },
             ]}
           >
             <Input.Password
@@ -157,6 +166,15 @@ export default function Login() {
               placeholder="Nhập mật khẩu"
             />
           </Form.Item>
+
+          {loginError && (
+            <Alert
+              type="error"
+              showIcon
+              message={loginError}
+              style={{ marginBottom: 16 }}
+            />
+          )}
 
           <Form.Item style={{ marginBottom: 12 }}>
             <Button
@@ -169,36 +187,18 @@ export default function Login() {
               Đăng nhập
             </Button>
           </Form.Item>
-        </Form>
 
-        <Card
-          size="small"
-          style={{
-            marginTop: 20,
-            background: "#f8fafc"
-          }}
-        >
-          <Typography.Text strong>
-            Tài khoản dùng thử
-          </Typography.Text>
-
-          <div style={{ marginTop: 10 }}>
-            <Space direction="vertical" size={4}>
-              <Typography.Text>
-                Admin: <code>admin</code>
-              </Typography.Text>
-              <Typography.Text>
-                Giáo viên: <code>giaovien</code>
-              </Typography.Text>
-              <Typography.Text>
-                Học viên: <code>hocvien</code>
-              </Typography.Text>
-              <Typography.Text type="secondary">
-                Mật khẩu chung: <code>123456</code>
-              </Typography.Text>
-            </Space>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+            }}
+          >
+            <Link to="/forgot-password">
+              Quên mật khẩu?
+            </Link>
           </div>
-        </Card>
+        </Form>
       </Card>
     </div>
   );

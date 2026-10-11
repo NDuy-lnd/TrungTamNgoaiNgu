@@ -1,80 +1,100 @@
 
-import { createContext, useContext, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
+
+import api from "../services/api";
 
 const AuthContext = createContext(null);
 
-const accounts = [
-  {
-    username: "admin",
-    password: "123456",
-    role: "admin",
-    name: "Quản trị viên"
-  },
-  {
-    username: "giaovien",
-    password: "123456",
-    role: "teacher",
-    name: "Nguyễn Văn Minh"
-  },
-  {
-    username: "hocvien",
-    password: "123456",
-    role: "student",
-    name: "Học viên mẫu"
-  }
-];
+const TOKEN_KEY = "ttnn_access_token";
+
+const roleMap = {
+  "Quản trị viên": "admin",
+  "Giáo viên": "teacher",
+  "Học viên": "student",
+};
+
+function normalizeUser(data) {
+  return {
+    ...data,
+    id: data.ma_tai_khoan,
+    name: data.ho_ten || data.ten_dang_nhap,
+    role: roleMap[data.vai_tro],
+  };
+}
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    try {
-      return JSON.parse(
-        sessionStorage.getItem("ttnn_demo_user")
-      );
-    } catch {
-      return null;
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+
+    async function restoreSession() {
+      const token = sessionStorage.getItem(TOKEN_KEY);
+
+      if (!token) {
+        if (active) setLoading(false);
+        return;
+      }
+
+      try {
+        const response = await api.get("/api/auth/me");
+
+        if (active) {
+          setUser(normalizeUser(response.data));
+        }
+      } catch {
+        sessionStorage.removeItem(TOKEN_KEY);
+
+        if (active) {
+          setUser(null);
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
     }
-  });
 
-  const login = (username, password) => {
-    const account = accounts.find(
-      (a) =>
-        a.username === username.trim() &&
-        a.password === password
-    );
+    restoreSession();
 
-    if (!account) {
-      return {
-        success: false,
-        message: "Sai tên đăng nhập hoặc mật khẩu!"
-      };
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function login(username, password) {
+    const response = await api.post("/api/auth/login", {
+      ten_dang_nhap: username,
+      mat_khau: password,
+    });
+
+    const { access_token, user: account } = response.data;
+
+    const normalizedUser = normalizeUser(account);
+
+    if (!normalizedUser.role) {
+      throw new Error("Vai trò tài khoản không hợp lệ");
     }
 
-    const loggedInUser = {
-      username: account.username,
-      role: account.role,
-      name: account.name
-    };
+    sessionStorage.setItem(TOKEN_KEY, access_token);
+    setUser(normalizedUser);
 
-    sessionStorage.setItem(
-      "ttnn_demo_user",
-      JSON.stringify(loggedInUser)
-    );
+    return normalizedUser;
+  }
 
-    setUser(loggedInUser);
-
-    return {
-      success: true,
-      user: loggedInUser
-    };
-  };
-
-  const logout = () => {
-    sessionStorage.removeItem("ttnn_demo_user");
+  function logout() {
+    sessionStorage.removeItem(TOKEN_KEY);
     setUser(null);
-  };
+  }
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider
+      value={{ user, loading, login, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -84,7 +104,9 @@ export function useAuth() {
   const context = useContext(AuthContext);
 
   if (!context) {
-    throw new Error("AuthProvider chưa được khai báo");
+    throw new Error(
+      "useAuth phải được sử dụng bên trong AuthProvider"
+    );
   }
 
   return context;
