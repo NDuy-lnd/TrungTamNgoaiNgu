@@ -1,5 +1,6 @@
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+
 import {
   Card,
   Typography,
@@ -24,215 +25,206 @@ import {
   SearchOutlined,
   EditOutlined,
   EyeOutlined,
-  DeleteOutlined,
+  LockOutlined,
+  UnlockOutlined,
   TeamOutlined,
   CheckCircleOutlined,
   StopOutlined,
+  ReloadOutlined,
 } from "@ant-design/icons";
 
-// Dữ liệu mẫu, chưa kết nối MySQL
-const initialTeachers = [
-  {
-    ma_giao_vien: 1,
-    ho_ten: "Nguyễn Văn Minh",
-    ngay_sinh: "1985-04-12",
-    gioi_tinh: "Nam",
-    email: "minh@gmail.com",
-    so_dien_thoai: "0912345678",
-    chuyen_mon: "Tiếng Anh",
-    trang_thai: "Đang làm việc",
-  },
-  {
-    ma_giao_vien: 2,
-    ho_ten: "Trần Thị Lan",
-    ngay_sinh: "1990-08-20",
-    gioi_tinh: "Nữ",
-    email: "lan@gmail.com",
-    so_dien_thoai: "0987654321",
-    chuyen_mon: "Tiếng Trung",
-    trang_thai: "Đang làm việc",
-  },
-  {
-    ma_giao_vien: 3,
-    ho_ten: "Lê Quốc Huy",
-    ngay_sinh: "1988-11-05",
-    gioi_tinh: "Nam",
-    email: "huy@gmail.com",
-    so_dien_thoai: "0934567890",
-    chuyen_mon: "Tiếng Nhật",
-    trang_thai: "Đang làm việc",
-  },
-  {
-    ma_giao_vien: 4,
-    ho_ten: "Phạm Thị Hương",
-    ngay_sinh: "1992-02-15",
-    gioi_tinh: "Nữ",
-    email: "huong@gmail.com",
-    so_dien_thoai: "0967891234",
-    chuyen_mon: "Tiếng Hàn",
-    trang_thai: "Đang làm việc",
-  },
-  {
-    ma_giao_vien: 5,
-    ho_ten: "Đỗ Văn Nam",
-    ngay_sinh: "1987-06-25",
-    gioi_tinh: "Nam",
-    email: "nam@gmail.com",
-    so_dien_thoai: "0978123456",
-    chuyen_mon: "Tiếng Anh",
-    trang_thai: "Ngừng làm việc",
-  },
-  {
-    ma_giao_vien: 6,
-    ho_ten: "Vũ Thị Mai",
-    ngay_sinh: "1993-09-18",
-    gioi_tinh: "Nữ",
-    email: "mai@gmail.com",
-    so_dien_thoai: "0901234567",
-    chuyen_mon: "Tiếng Trung",
-    trang_thai: "Đang làm việc",
-  },
-  {
-    ma_giao_vien: 7,
-    ho_ten: "Hoàng Đức Anh",
-    ngay_sinh: "1989-03-10",
-    gioi_tinh: "Nam",
-    email: "ducanh@gmail.com",
-    so_dien_thoai: "0923456789",
-    chuyen_mon: "Tiếng Nhật",
-    trang_thai: "Đang làm việc",
-  },
-  {
-    ma_giao_vien: 8,
-    ho_ten: "Bùi Thị Ngọc",
-    ngay_sinh: "1991-12-22",
-    gioi_tinh: "Nữ",
-    email: "ngoc@gmail.com",
-    so_dien_thoai: "0945678901",
-    chuyen_mon: "Tiếng Hàn",
-    trang_thai: "Đang làm việc",
-  },
-  {
-    ma_giao_vien: 9,
-    ho_ten: "Ngô Minh Tuấn",
-    ngay_sinh: "1986-07-08",
-    gioi_tinh: "Nam",
-    email: "tuan@gmail.com",
-    so_dien_thoai: "0956789012",
-    chuyen_mon: "Tiếng Anh",
-    trang_thai: "Đang làm việc",
-  },
-  {
-    ma_giao_vien: 10,
-    ho_ten: "Đặng Thị Thu",
-    ngay_sinh: "1994-01-30",
-    gioi_tinh: "Nữ",
-    email: "thu@gmail.com",
-    so_dien_thoai: "0981234567",
-    chuyen_mon: "Tiếng Trung",
-    trang_thai: "Đang làm việc",
-  },
-];
+import giaoVienService from "../../services/giaoVienService";
+
+
+function getErrorMessage(error) {
+  const detail = error?.response?.data?.detail;
+
+  if (typeof detail === "string") return detail;
+
+  if (Array.isArray(detail)) {
+    return detail.map((item) => item.msg).join("; ");
+  }
+
+  if (error?.response?.status === 401) {
+    return "Phiên đăng nhập đã hết hạn.";
+  }
+
+  if (error?.response?.status === 403) {
+    return "Bạn không có quyền quản lý giáo viên.";
+  }
+
+  return "Không thể kết nối đến máy chủ.";
+}
+
 
 export default function GiaoVien() {
-  const [teachers, setTeachers] = useState(initialTeachers);
+  const [teachers, setTeachers] = useState([]);
   const [searchText, setSearchText] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState(null);
   const [viewingTeacher, setViewingTeacher] = useState(null);
 
-  const [form] = Form.useForm();
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  // Thống kê
-  const totalTeachers = teachers.length;
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(7);
+  const [total, setTotal] = useState(0);
 
-  const activeTeachers = teachers.filter(
-    (teacher) => teacher.trang_thai === "Đang làm việc"
-  ).length;
-
-  const inactiveTeachers = totalTeachers - activeTeachers;
-
-  // Tìm kiếm và lọc
-  const filteredTeachers = teachers.filter((teacher) => {
-    const keyword = searchText.trim().toLowerCase();
-
-    const matchSearch =
-      teacher.ho_ten.toLowerCase().includes(keyword) ||
-      (teacher.email || "").toLowerCase().includes(keyword) ||
-      (teacher.chuyen_mon || "").toLowerCase().includes(keyword) ||
-      (teacher.so_dien_thoai || "").includes(keyword);
-
-    const matchStatus =
-      filterStatus === "all" ||
-      teacher.trang_thai === filterStatus;
-
-    return matchSearch && matchStatus;
+  const [stats, setStats] = useState({
+    total: 0,
+    active: 0,
+    inactive: 0,
   });
+
+  const [form] = Form.useForm();
+  const [messageApi, contextHolder] = message.useMessage();
+
+
+  // Lấy danh sách và thống kê từ MySQL
+  const fetchTeachers = useCallback(async () => {
+    setLoading(true);
+
+    try {
+      const data = await giaoVienService.getAll({
+        search: searchText.trim(),
+        status:
+          filterStatus === "all"
+            ? undefined
+            : filterStatus === "active",
+        page,
+        page_size: pageSize,
+      });
+
+      setTeachers(data.items || []);
+      setTotal(data.total || 0);
+      setStats(data.stats || {
+        total: 0,
+        active: 0,
+        inactive: 0,
+      });
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }, [searchText, filterStatus, page, pageSize, messageApi]);
+
+
+  useEffect(() => {
+    fetchTeachers();
+  }, [fetchTeachers]);
+
 
   // Mở form thêm
   const handleAdd = () => {
     setEditingTeacher(null);
     form.resetFields();
-    form.setFieldsValue({
-      trang_thai: "Đang làm việc",
-    });
+    form.setFieldsValue({ trang_thai: true });
     setIsModalOpen(true);
   };
+
 
   // Mở form sửa
   const handleEdit = (teacher) => {
     setEditingTeacher(teacher);
-    form.setFieldsValue(teacher);
+    form.resetFields();
+
+    form.setFieldsValue({
+      ho_ten: teacher.ho_ten,
+      ngay_sinh: teacher.ngay_sinh,
+      gioi_tinh: teacher.gioi_tinh,
+      email: teacher.email,
+      so_dien_thoai: teacher.so_dien_thoai,
+      chuyen_mon: teacher.chuyen_mon,
+      trang_thai: teacher.trang_thai,
+    });
+
     setIsModalOpen(true);
   };
 
-  // Lưu dữ liệu mẫu
+
+  // Lưu giáo viên vào MySQL
   const handleSave = async () => {
+    let values;
+
     try {
-      const values = await form.validateFields();
+      values = await form.validateFields();
+    } catch {
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const payload = {
+        ho_ten: values.ho_ten.trim(),
+        ngay_sinh: values.ngay_sinh || null,
+        gioi_tinh: values.gioi_tinh || null,
+        email: values.email?.trim() || null,
+        so_dien_thoai: values.so_dien_thoai?.trim() || null,
+        chuyen_mon: values.chuyen_mon?.trim() || null,
+        trang_thai: values.trang_thai,
+      };
 
       if (editingTeacher) {
-        setTeachers((prev) =>
-          prev.map((teacher) =>
-            teacher.ma_giao_vien === editingTeacher.ma_giao_vien
-              ? { ...teacher, ...values }
-              : teacher
-          )
+        await giaoVienService.update(
+          editingTeacher.ma_giao_vien,
+          payload
         );
 
-        message.success("Cập nhật giáo viên thành công!");
+        messageApi.success("Cập nhật giáo viên thành công!");
       } else {
-        const nextId =
-          Math.max(0, ...teachers.map((t) => t.ma_giao_vien)) + 1;
+        await giaoVienService.create({
+          ...payload,
+          ten_dang_nhap: values.ten_dang_nhap.trim(),
+          mat_khau: values.mat_khau,
+        });
 
-        setTeachers((prev) => [
-          ...prev,
-          {
-            ...values,
-            ma_giao_vien: nextId,
-          },
-        ]);
-
-        message.success("Thêm giáo viên thành công!");
+        messageApi.success("Thêm giáo viên thành công!");
       }
 
       setIsModalOpen(false);
       setEditingTeacher(null);
       form.resetFields();
-    } catch {
-      // Form không hợp lệ, Ant Design hiển thị lỗi.
+
+      if (!editingTeacher && page !== 1) {
+        setPage(1);
+      } else {
+        await fetchTeachers();
+      }
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    } finally {
+      setSaving(false);
     }
   };
 
-  // Xóa khỏi danh sách mẫu
-  const handleDelete = (id) => {
-    setTeachers((prev) =>
-      prev.filter((teacher) => teacher.ma_giao_vien !== id)
-    );
 
-    message.success("Đã xóa giáo viên khỏi danh sách mẫu!");
+  // Khóa hoặc mở lại tài khoản
+  const handleChangeStatus = async (teacher) => {
+    const newStatus = !teacher.trang_thai;
+
+    try {
+      await giaoVienService.changeStatus(
+        teacher.ma_giao_vien,
+        newStatus
+      );
+
+      messageApi.success(
+        newStatus
+          ? "Đã mở lại tài khoản giáo viên!"
+          : "Đã khóa tài khoản giáo viên!"
+      );
+
+      await fetchTeachers();
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    }
   };
+
 
   const columns = [
     {
@@ -243,36 +235,36 @@ export default function GiaoVien() {
     {
       title: "Họ và tên",
       dataIndex: "ho_ten",
-      render: (text) => <strong>{text}</strong>,
+      render: (value) => <strong>{value}</strong>,
     },
     {
       title: "Giới tính",
       dataIndex: "gioi_tinh",
       width: 95,
+      render: (value) => value || "—",
     },
     {
       title: "Chuyên môn",
       dataIndex: "chuyen_mon",
-      render: (value) => <Tag color="blue">{value}</Tag>,
+      render: (value) =>
+        value ? <Tag color="blue">{value}</Tag> : "—",
     },
     {
       title: "Email",
       dataIndex: "email",
+      render: (value) => value || "—",
     },
     {
       title: "Số điện thoại",
       dataIndex: "so_dien_thoai",
+      render: (value) => value || "—",
     },
     {
       title: "Trạng thái",
       dataIndex: "trang_thai",
       render: (status) => (
-        <Tag
-          color={
-            status === "Đang làm việc" ? "green" : "red"
-          }
-        >
-          {status}
+        <Tag color={status ? "green" : "red"}>
+          {status ? "Đang làm việc" : "Ngừng làm việc"}
         </Tag>
       ),
     },
@@ -296,16 +288,32 @@ export default function GiaoVien() {
           />
 
           <Popconfirm
-            title="Xóa giáo viên?"
-            description="Xóa giáo viên khỏi danh sách mẫu?"
-            okText="Xóa"
+            title={
+              record.trang_thai
+                ? "Khóa tài khoản giáo viên?"
+                : "Mở lại tài khoản giáo viên?"
+            }
+            description={
+              record.trang_thai
+                ? "Giáo viên sẽ không thể đăng nhập."
+                : "Giáo viên sẽ có thể đăng nhập trở lại."
+            }
+            okText="Xác nhận"
             cancelText="Hủy"
-            onConfirm={() => handleDelete(record.ma_giao_vien)}
+            onConfirm={() => handleChangeStatus(record)}
           >
             <Button
-              danger
-              icon={<DeleteOutlined />}
-              title="Xóa"
+              danger={record.trang_thai}
+              icon={
+                record.trang_thai
+                  ? <LockOutlined />
+                  : <UnlockOutlined />
+              }
+              title={
+                record.trang_thai
+                  ? "Khóa tài khoản"
+                  : "Mở tài khoản"
+              }
             />
           </Popconfirm>
         </Space>
@@ -313,11 +321,17 @@ export default function GiaoVien() {
     },
   ];
 
+
   return (
     <div>
+      {contextHolder}
+
       {/* Tiêu đề */}
       <div style={{ marginBottom: 24 }}>
-        <Typography.Title level={3} style={{ marginBottom: 4 }}>
+        <Typography.Title
+          level={3}
+          style={{ marginBottom: 4 }}
+        >
           Quản lý giáo viên
         </Typography.Title>
 
@@ -332,7 +346,7 @@ export default function GiaoVien() {
           <Card>
             <Statistic
               title="Tổng giáo viên"
-              value={totalTeachers}
+              value={stats.total}
               prefix={<TeamOutlined />}
               valueStyle={{ color: "#1677ff" }}
             />
@@ -343,7 +357,7 @@ export default function GiaoVien() {
           <Card>
             <Statistic
               title="Đang làm việc"
-              value={activeTeachers}
+              value={stats.active}
               prefix={<CheckCircleOutlined />}
               valueStyle={{ color: "#52c41a" }}
             />
@@ -354,7 +368,7 @@ export default function GiaoVien() {
           <Card>
             <Statistic
               title="Ngừng làm việc"
-              value={inactiveTeachers}
+              value={stats.inactive}
               prefix={<StopOutlined />}
               valueStyle={{ color: "#ff4d4f" }}
             />
@@ -378,45 +392,68 @@ export default function GiaoVien() {
               prefix={<SearchOutlined />}
               style={{ width: 290 }}
               value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
+              onChange={(e) => {
+                setSearchText(e.target.value);
+                setPage(1);
+              }}
               allowClear
             />
 
             <Select
               value={filterStatus}
-              onChange={setFilterStatus}
+              onChange={(value) => {
+                setFilterStatus(value);
+                setPage(1);
+              }}
               style={{ width: 170 }}
               options={[
-                { value: "all", label: "Tất cả trạng thái" },
                 {
-                  value: "Đang làm việc",
+                  value: "all",
+                  label: "Tất cả trạng thái",
+                },
+                {
+                  value: "active",
                   label: "Đang làm việc",
                 },
                 {
-                  value: "Ngừng làm việc",
+                  value: "inactive",
                   label: "Ngừng làm việc",
                 },
               ]}
             />
           </Space>
 
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={handleAdd}
-          >
-            Thêm giáo viên
-          </Button>
+          <Space>
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={fetchTeachers}
+              loading={loading}
+            >
+              Làm mới
+            </Button>
+
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={handleAdd}
+            >
+              Thêm giáo viên
+            </Button>
+          </Space>
         </Space>
 
         <Table
           columns={columns}
-          dataSource={filteredTeachers}
+          dataSource={teachers}
           rowKey="ma_giao_vien"
+          loading={loading}
           pagination={{
-            pageSize: 7,
+            current: page,
+            pageSize,
+            total,
             showSizeChanger: false,
-            showTotal: (total) => `Tổng ${total} giáo viên`,
+            showTotal: (count) => `Tổng ${count} giáo viên`,
+            onChange: setPage,
           }}
           scroll={{ x: 1100 }}
         />
@@ -438,12 +475,14 @@ export default function GiaoVien() {
         }}
         okText="Lưu thông tin"
         cancelText="Hủy"
+        confirmLoading={saving}
         width={650}
       >
         <Form
           form={form}
           layout="vertical"
           style={{ marginTop: 20 }}
+          initialValues={{ trang_thai: true }}
         >
           <Row gutter={16}>
             <Col span={12}>
@@ -453,11 +492,15 @@ export default function GiaoVien() {
                 rules={[
                   {
                     required: true,
+                    whitespace: true,
                     message: "Vui lòng nhập họ tên",
                   },
                 ]}
               >
-                <Input placeholder="Nhập họ tên" />
+                <Input
+                  placeholder="Nhập họ tên"
+                  maxLength={100}
+                />
               </Form.Item>
             </Col>
 
@@ -487,6 +530,12 @@ export default function GiaoVien() {
               <Form.Item
                 label="Ngày sinh"
                 name="ngay_sinh"
+                rules={[
+                  {
+                    pattern: /^\d{4}-\d{2}-\d{2}$/,
+                    message: "Nhập theo dạng YYYY-MM-DD",
+                  },
+                ]}
               >
                 <Input placeholder="YYYY-MM-DD" />
               </Form.Item>
@@ -518,7 +567,10 @@ export default function GiaoVien() {
                   },
                 ]}
               >
-                <Input placeholder="Nhập email" />
+                <Input
+                  placeholder="Nhập email"
+                  maxLength={100}
+                />
               </Form.Item>
             </Col>
 
@@ -529,22 +581,66 @@ export default function GiaoVien() {
                 rules={[
                   {
                     required: true,
-                    message: "Chọn chuyên môn",
+                    whitespace: true,
+                    message: "Nhập chuyên môn",
                   },
                 ]}
               >
-                <Select
-                  placeholder="Chọn chuyên môn"
-                  options={[
-                    { value: "Tiếng Anh", label: "Tiếng Anh" },
-                    { value: "Tiếng Trung", label: "Tiếng Trung" },
-                    { value: "Tiếng Nhật", label: "Tiếng Nhật" },
-                    { value: "Tiếng Hàn", label: "Tiếng Hàn" },
-                    { value: "Tiếng Pháp", label: "Tiếng Pháp" },
-                  ]}
+                <Input
+                  placeholder="Ví dụ: IELTS, TOEIC..."
+                  maxLength={100}
                 />
               </Form.Item>
             </Col>
+
+            {!editingTeacher && (
+              <>
+                <Col span={12}>
+                  <Form.Item
+                    label="Tên đăng nhập"
+                    name="ten_dang_nhap"
+                    rules={[
+                      {
+                        required: true,
+                        whitespace: true,
+                        message: "Nhập tên đăng nhập",
+                      },
+                      {
+                        min: 3,
+                        message: "Tối thiểu 3 ký tự",
+                      },
+                    ]}
+                  >
+                    <Input
+                      placeholder="Ví dụ: GV011"
+                      maxLength={50}
+                    />
+                  </Form.Item>
+                </Col>
+
+                <Col span={12}>
+                  <Form.Item
+                    label="Mật khẩu"
+                    name="mat_khau"
+                    rules={[
+                      {
+                        required: true,
+                        message: "Nhập mật khẩu",
+                      },
+                      {
+                        min: 8,
+                        message: "Tối thiểu 8 ký tự",
+                      },
+                    ]}
+                  >
+                    <Input.Password
+                      placeholder="Tối thiểu 8 ký tự"
+                      maxLength={128}
+                    />
+                  </Form.Item>
+                </Col>
+              </>
+            )}
 
             <Col span={24}>
               <Form.Item
@@ -560,11 +656,11 @@ export default function GiaoVien() {
                 <Select
                   options={[
                     {
-                      value: "Đang làm việc",
+                      value: true,
                       label: "Đang làm việc",
                     },
                     {
-                      value: "Ngừng làm việc",
+                      value: false,
                       label: "Ngừng làm việc",
                     },
                   ]}
@@ -609,41 +705,48 @@ export default function GiaoVien() {
               },
               {
                 key: "3",
+                label: "Tên đăng nhập",
+                children: viewingTeacher.ten_dang_nhap,
+              },
+              {
+                key: "4",
                 label: "Ngày sinh",
                 children: viewingTeacher.ngay_sinh || "—",
               },
               {
-                key: "4",
+                key: "5",
                 label: "Giới tính",
                 children: viewingTeacher.gioi_tinh || "—",
               },
               {
-                key: "5",
+                key: "6",
                 label: "Email",
                 children: viewingTeacher.email || "—",
               },
               {
-                key: "6",
+                key: "7",
                 label: "Số điện thoại",
                 children: viewingTeacher.so_dien_thoai || "—",
               },
               {
-                key: "7",
+                key: "8",
                 label: "Chuyên môn",
-                children: viewingTeacher.chuyen_mon,
+                children: viewingTeacher.chuyen_mon || "—",
               },
               {
-                key: "8",
+                key: "9",
                 label: "Trạng thái",
                 children: (
                   <Tag
                     color={
-                      viewingTeacher.trang_thai === "Đang làm việc"
+                      viewingTeacher.trang_thai
                         ? "green"
                         : "red"
                     }
                   >
-                    {viewingTeacher.trang_thai}
+                    {viewingTeacher.trang_thai
+                      ? "Đang làm việc"
+                      : "Ngừng làm việc"}
                   </Tag>
                 ),
               },

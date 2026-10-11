@@ -1,136 +1,121 @@
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Card, Typography, Row, Col, Statistic,
   Table, Button, Input, Select, Space,
   Tag, Modal, Form, TimePicker,
   Popconfirm, message, Segmented, Empty
 } from "antd";
-
 import {
   CalendarOutlined, PlusOutlined,
   SearchOutlined, EditOutlined,
   DeleteOutlined, ClockCircleOutlined,
-  HomeOutlined
+  HomeOutlined, ReloadOutlined
 } from "@ant-design/icons";
-
 import dayjs from "dayjs";
+import customParseFormat from "dayjs/plugin/customParseFormat";
+import lichHocService from "../../services/lichHocService";
+
+dayjs.extend(customParseFormat);
 
 const days = [
   "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5",
   "Thứ 6", "Thứ 7", "Chủ nhật"
 ];
 
-// Lớp học mẫu
-const classes = [
-  { id: 1, name: "Giao tiếp A01" },
-  { id: 2, name: "IELTS 5.5 - A01" },
-  { id: 3, name: "IELTS 6.5 - A01" },
-  { id: 4, name: "HSK 1 - T01" },
-  { id: 5, name: "HSK 2 - T01" },
-  { id: 6, name: "JLPT N5 - N01" },
-  { id: 7, name: "TOPIK I - H01" },
-  { id: 8, name: "Giao tiếp A02" },
-  { id: 9, name: "IELTS 5.5 - A02" },
-  { id: 10, name: "HSK 1 - T02" },
-  { id: 11, name: "TOPIK I - H02" },
-  { id: 12, name: "Giao tiếp A00" },
-  { id: 13, name: "JLPT N5 - N00" },
-  { id: 14, name: "HSK 1 - T00" }
-];
-
-// Lịch học mẫu lặp lại hàng tuần
-const initialSchedules = [
-  {
-    ma_lich: 1, ma_lop: 1, thu: "Thứ 2",
-    gio_bat_dau: "18:00", gio_ket_thuc: "20:00",
-    phong_hoc: "P101"
-  },
-  {
-    ma_lich: 2, ma_lop: 1, thu: "Thứ 4",
-    gio_bat_dau: "18:00", gio_ket_thuc: "20:00",
-    phong_hoc: "P101"
-  },
-  {
-    ma_lich: 3, ma_lop: 2, thu: "Thứ 3",
-    gio_bat_dau: "18:00", gio_ket_thuc: "20:00",
-    phong_hoc: "P102"
-  },
-  {
-    ma_lich: 4, ma_lop: 2, thu: "Thứ 5",
-    gio_bat_dau: "18:00", gio_ket_thuc: "20:00",
-    phong_hoc: "P102"
-  },
-  {
-    ma_lich: 5, ma_lop: 3, thu: "Thứ 2",
-    gio_bat_dau: "08:00", gio_ket_thuc: "10:00",
-    phong_hoc: "P103"
-  },
-  {
-    ma_lich: 6, ma_lop: 4, thu: "Thứ 3",
-    gio_bat_dau: "08:00", gio_ket_thuc: "10:00",
-    phong_hoc: "P101"
-  },
-  {
-    ma_lich: 7, ma_lop: 5, thu: "Thứ 4",
-    gio_bat_dau: "08:00", gio_ket_thuc: "10:00",
-    phong_hoc: "P102"
-  },
-  {
-    ma_lich: 8, ma_lop: 6, thu: "Thứ 5",
-    gio_bat_dau: "08:00", gio_ket_thuc: "10:00",
-    phong_hoc: "P103"
-  },
-  {
-    ma_lich: 9, ma_lop: 7, thu: "Thứ 6",
-    gio_bat_dau: "18:00", gio_ket_thuc: "20:00",
-    phong_hoc: "P104"
-  },
-  {
-    ma_lich: 10, ma_lop: 8, thu: "Thứ 7",
-    gio_bat_dau: "09:00", gio_ket_thuc: "11:00",
-    phong_hoc: "P105"
-  },
-  {
-    ma_lich: 11, ma_lop: 9, thu: "Thứ 2",
-    gio_bat_dau: "18:00", gio_ket_thuc: "20:00",
-    phong_hoc: "P105"
-  },
-  {
-    ma_lich: 12, ma_lop: 10, thu: "Thứ 4",
-    gio_bat_dau: "14:00", gio_ket_thuc: "16:00",
-    phong_hoc: "P103"
-  }
-];
-
-const timeToMinutes = (time) => {
-  const [hour, minute] = time.split(":").map(Number);
+const timeToMinutes = (value) => {
+  const [hour, minute] = value.split(":").map(Number);
   return hour * 60 + minute;
 };
 
-const hasTimeOverlap = (aStart, aEnd, bStart, bEnd) =>
-  timeToMinutes(aStart) < timeToMinutes(bEnd) &&
-  timeToMinutes(bStart) < timeToMinutes(aEnd);
+function getErrorMessage(error) {
+  const detail = error?.response?.data?.detail;
+
+  if (typeof detail === "string") return detail;
+
+  if (Array.isArray(detail)) {
+    return detail.map((item) => item.msg).join("; ");
+  }
+
+  if (error?.response?.status === 401) {
+    return "Phiên đăng nhập đã hết hạn.";
+  }
+
+  if (error?.response?.status === 403) {
+    return "Bạn không có quyền quản lý lịch học.";
+  }
+
+  return "Không thể kết nối đến máy chủ.";
+}
 
 export default function LichHoc() {
-  const [schedules, setSchedules] = useState(initialSchedules);
+  const [schedules, setSchedules] = useState([]);
+  const [classes, setClasses] = useState([]);
+
   const [searchText, setSearchText] = useState("");
   const [filterDay, setFilterDay] = useState("all");
   const [filterClass, setFilterClass] = useState("all");
   const [viewMode, setViewMode] = useState("Thời khóa biểu");
+
   const [modalOpen, setModalOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(null);
+
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const [stats, setStats] = useState({
+    total: 0,
+    classes: 0,
+    rooms: 0,
+  });
+
   const [form] = Form.useForm();
+  const [messageApi, contextHolder] = message.useMessage();
+
+  // Lấy lịch học thực tế từ MySQL
+  const fetchSchedules = useCallback(async () => {
+    setLoading(true);
+
+    try {
+      const data = await lichHocService.getAll();
+      setSchedules(data.items || []);
+      setStats(data.stats || {
+        total: 0,
+        classes: 0,
+        rooms: 0,
+      });
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }, [messageApi]);
+
+  // Lấy danh sách lớp học để chọn
+  const fetchClasses = useCallback(async () => {
+    try {
+      const data = await lichHocService.getOptions();
+      setClasses(data || []);
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    }
+  }, [messageApi]);
+
+  useEffect(() => {
+    fetchSchedules();
+    fetchClasses();
+  }, [fetchSchedules, fetchClasses]);
 
   const className = (id) =>
-    classes.find((item) => item.id === id)?.name ||
+    classes.find((item) => item.ma_lop === id)?.ten_lop ||
     "Chưa xác định";
 
+  // Tìm kiếm và lọc
   const filteredSchedules = schedules.filter((item) => {
     const keyword = searchText.trim().toLowerCase();
 
     const matchesSearch =
-      className(item.ma_lop).toLowerCase().includes(keyword) ||
+      item.ten_lop.toLowerCase().includes(keyword) ||
       item.phong_hoc.toLowerCase().includes(keyword);
 
     const matchesDay =
@@ -150,129 +135,109 @@ export default function LichHoc() {
 
   const handleEdit = (item) => {
     setEditingSchedule(item);
+    form.resetFields();
 
     form.setFieldsValue({
-      ...item,
+      ma_lop: item.ma_lop,
+      thu: item.thu,
       gio_bat_dau: dayjs(item.gio_bat_dau, "HH:mm"),
-      gio_ket_thuc: dayjs(item.gio_ket_thuc, "HH:mm")
+      gio_ket_thuc: dayjs(item.gio_ket_thuc, "HH:mm"),
+      phong_hoc: item.phong_hoc,
     });
 
     setModalOpen(true);
   };
 
+  // Lưu thêm hoặc sửa lịch học
   const handleSave = async () => {
+    let values;
+
     try {
-      const values = await form.validateFields();
+      values = await form.validateFields();
+    } catch {
+      return;
+    }
 
-      const data = {
-        ...values,
-        phong_hoc: values.phong_hoc.trim().toUpperCase(),
-        gio_bat_dau: values.gio_bat_dau.format("HH:mm"),
-        gio_ket_thuc: values.gio_ket_thuc.format("HH:mm")
-      };
+    const data = {
+      ma_lop: values.ma_lop,
+      thu: values.thu,
+      gio_bat_dau: values.gio_bat_dau.format("HH:mm"),
+      gio_ket_thuc: values.gio_ket_thuc.format("HH:mm"),
+      phong_hoc: values.phong_hoc.trim().toUpperCase(),
+    };
 
-      if (
-        timeToMinutes(data.gio_ket_thuc) <=
-        timeToMinutes(data.gio_bat_dau)
-      ) {
-        message.error("Giờ kết thúc phải sau giờ bắt đầu!");
-        return;
-      }
+    if (
+      timeToMinutes(data.gio_ket_thuc) <=
+      timeToMinutes(data.gio_bat_dau)
+    ) {
+      messageApi.error("Giờ kết thúc phải sau giờ bắt đầu!");
+      return;
+    }
 
-      const conflict = schedules.find((item) => {
-        if (
-          editingSchedule &&
-          item.ma_lich === editingSchedule.ma_lich
-        ) {
-          return false;
-        }
+    setSaving(true);
 
-        if (item.thu !== data.thu) return false;
-
-        const overlap = hasTimeOverlap(
-          item.gio_bat_dau,
-          item.gio_ket_thuc,
-          data.gio_bat_dau,
-          data.gio_ket_thuc
-        );
-
-        if (!overlap) return false;
-
-        return (
-          item.phong_hoc.toUpperCase() === data.phong_hoc ||
-          item.ma_lop === data.ma_lop
-        );
-      });
-
-      if (conflict) {
-        message.error(
-          "Trùng lịch phòng học hoặc lớp học!"
-        );
-        return;
-      }
-
+    try {
       if (editingSchedule) {
-        setSchedules((prev) =>
-          prev.map((item) =>
-            item.ma_lich === editingSchedule.ma_lich
-              ? { ...item, ...data }
-              : item
-          )
+        await lichHocService.update(
+          editingSchedule.ma_lich,
+          data
         );
-        message.success("Cập nhật lịch học thành công!");
+        messageApi.success("Cập nhật lịch học thành công!");
       } else {
-        const nextId =
-          Math.max(0, ...schedules.map((s) => s.ma_lich)) + 1;
-
-        setSchedules((prev) => [
-          ...prev,
-          { ma_lich: nextId, ...data }
-        ]);
-        message.success("Thêm lịch học thành công!");
+        await lichHocService.create(data);
+        messageApi.success("Thêm lịch học thành công!");
       }
 
       setModalOpen(false);
       setEditingSchedule(null);
       form.resetFields();
-    } catch {
-      // Form chưa hợp lệ.
+
+      await fetchSchedules();
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleDelete = (id) => {
-    setSchedules((prev) =>
-      prev.filter((item) => item.ma_lich !== id)
-    );
-    message.success("Đã xóa lịch học khỏi dữ liệu mẫu!");
+  // Xóa lịch học trong MySQL
+  const handleDelete = async (id) => {
+    try {
+      await lichHocService.delete(id);
+      messageApi.success("Đã xóa lịch học!");
+      await fetchSchedules();
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    }
   };
 
   const columns = [
     {
       title: "Mã lịch",
       dataIndex: "ma_lich",
-      width: 90
+      width: 90,
     },
     {
       title: "Lớp học",
-      dataIndex: "ma_lop",
-      render: (id) => <strong>{className(id)}</strong>
+      dataIndex: "ten_lop",
+      render: (value) => <strong>{value}</strong>,
     },
     {
       title: "Thứ",
       dataIndex: "thu",
-      render: (value) => <Tag color="blue">{value}</Tag>
+      render: (value) => <Tag color="blue">{value}</Tag>,
     },
     {
       title: "Giờ bắt đầu",
-      dataIndex: "gio_bat_dau"
+      dataIndex: "gio_bat_dau",
     },
     {
       title: "Giờ kết thúc",
-      dataIndex: "gio_ket_thuc"
+      dataIndex: "gio_ket_thuc",
     },
     {
       title: "Phòng học",
-      dataIndex: "phong_hoc"
+      dataIndex: "phong_hoc",
     },
     {
       title: "Thao tác",
@@ -285,8 +250,10 @@ export default function LichHoc() {
             onClick={() => handleEdit(record)}
             title="Chỉnh sửa"
           />
+
           <Popconfirm
             title="Xóa lịch học?"
+            description="Lịch học này sẽ bị xóa khỏi MySQL."
             okText="Xóa"
             cancelText="Hủy"
             onConfirm={() => handleDelete(record.ma_lich)}
@@ -298,16 +265,20 @@ export default function LichHoc() {
             />
           </Popconfirm>
         </Space>
-      )
-    }
+      ),
+    },
   ];
 
-  const uniqueRooms = new Set(
-    schedules.map((s) => s.phong_hoc)
-  ).size;
+  const availableClasses = classes.filter(
+    (item) =>
+      item.trang_thai !== "Đã kết thúc" ||
+      item.ma_lop === editingSchedule?.ma_lop
+  );
 
   return (
     <div>
+      {contextHolder}
+
       <div style={{ marginBottom: 24 }}>
         <Typography.Title
           level={3}
@@ -322,12 +293,13 @@ export default function LichHoc() {
         </Typography.Text>
       </div>
 
+      {/* Thống kê */}
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         <Col xs={24} md={8}>
           <Card>
             <Statistic
               title="Tổng lịch học"
-              value={schedules.length}
+              value={stats.total}
               prefix={<CalendarOutlined />}
               valueStyle={{ color: "#1677ff" }}
             />
@@ -338,9 +310,7 @@ export default function LichHoc() {
           <Card>
             <Statistic
               title="Số lớp có lịch"
-              value={
-                new Set(schedules.map((s) => s.ma_lop)).size
-              }
+              value={stats.classes}
               prefix={<ClockCircleOutlined />}
               valueStyle={{ color: "#52c41a" }}
             />
@@ -351,7 +321,7 @@ export default function LichHoc() {
           <Card>
             <Statistic
               title="Phòng học sử dụng"
-              value={uniqueRooms}
+              value={stats.rooms}
               prefix={<HomeOutlined />}
               valueStyle={{ color: "#722ed1" }}
             />
@@ -359,13 +329,14 @@ export default function LichHoc() {
         </Col>
       </Row>
 
+      {/* Danh sách / thời khóa biểu */}
       <Card>
         <Space
           wrap
           style={{
             display: "flex",
             justifyContent: "space-between",
-            marginBottom: 20
+            marginBottom: 20,
           }}
         >
           <Space wrap>
@@ -386,8 +357,8 @@ export default function LichHoc() {
                 { value: "all", label: "Tất cả thứ" },
                 ...days.map((day) => ({
                   value: day,
-                  label: day
-                }))
+                  label: day,
+                })),
               ]}
             />
 
@@ -399,21 +370,34 @@ export default function LichHoc() {
               optionFilterProp="label"
               options={[
                 { value: "all", label: "Tất cả lớp" },
-                ...classes.map((c) => ({
-                  value: c.id,
-                  label: c.name
-                }))
+                ...classes.map((item) => ({
+                  value: item.ma_lop,
+                  label: item.ten_lop,
+                })),
               ]}
             />
           </Space>
 
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={handleAdd}
-          >
-            Thêm lịch học
-          </Button>
+          <Space>
+            <Button
+              icon={<ReloadOutlined />}
+              loading={loading}
+              onClick={() => {
+                fetchSchedules();
+                fetchClasses();
+              }}
+            >
+              Làm mới
+            </Button>
+
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={handleAdd}
+            >
+              Thêm lịch học
+            </Button>
+          </Space>
         </Space>
 
         <Segmented
@@ -428,14 +412,20 @@ export default function LichHoc() {
             columns={columns}
             dataSource={filteredSchedules}
             rowKey="ma_lich"
-            pagination={{ pageSize: 8 }}
+            loading={loading}
+            pagination={{
+              pageSize: 8,
+              showSizeChanger: false,
+              showTotal: (count) =>
+                `Tổng ${count} lịch học`,
+            }}
             scroll={{ x: 900 }}
           />
         ) : (
           <Row gutter={[12, 12]}>
             {days.map((day) => {
               const daySchedules = filteredSchedules
-                .filter((s) => s.thu === day)
+                .filter((item) => item.thu === day)
                 .sort(
                   (a, b) =>
                     timeToMinutes(a.gio_bat_dau) -
@@ -455,7 +445,7 @@ export default function LichHoc() {
                     title={day}
                     style={{
                       minHeight: 230,
-                      height: "100%"
+                      height: "100%",
                     }}
                   >
                     {daySchedules.length === 0 ? (
@@ -474,11 +464,11 @@ export default function LichHoc() {
                             size="small"
                             style={{
                               background: "#f0f5ff",
-                              borderColor: "#d6e4ff"
+                              borderColor: "#d6e4ff",
                             }}
                           >
                             <Typography.Text strong>
-                              {className(item.ma_lop)}
+                              {item.ten_lop}
                             </Typography.Text>
 
                             <div style={{ marginTop: 6 }}>
@@ -488,7 +478,8 @@ export default function LichHoc() {
                             </div>
 
                             <div style={{ marginTop: 4 }}>
-                              <HomeOutlined /> {item.phong_hoc}
+                              <HomeOutlined />{" "}
+                              {item.phong_hoc}
                             </div>
 
                             <Space style={{ marginTop: 10 }}>
@@ -512,7 +503,7 @@ export default function LichHoc() {
         )}
       </Card>
 
-      {/* Form thêm / sửa lịch học */}
+      {/* Thêm / sửa lịch học */}
       <Modal
         title={
           editingSchedule
@@ -528,6 +519,7 @@ export default function LichHoc() {
         }}
         okText="Lưu lịch học"
         cancelText="Hủy"
+        confirmLoading={saving}
         width={600}
       >
         <Form
@@ -539,16 +531,19 @@ export default function LichHoc() {
             name="ma_lop"
             label="Lớp học"
             rules={[
-              { required: true, message: "Chọn lớp học!" }
+              {
+                required: true,
+                message: "Chọn lớp học!",
+              },
             ]}
           >
             <Select
               showSearch
               optionFilterProp="label"
               placeholder="Chọn lớp học"
-              options={classes.map((c) => ({
-                value: c.id,
-                label: c.name
+              options={availableClasses.map((item) => ({
+                value: item.ma_lop,
+                label: item.ten_lop,
               }))}
             />
           </Form.Item>
@@ -557,14 +552,17 @@ export default function LichHoc() {
             name="thu"
             label="Thứ trong tuần"
             rules={[
-              { required: true, message: "Chọn thứ!" }
+              {
+                required: true,
+                message: "Chọn thứ!",
+              },
             ]}
           >
             <Select
               placeholder="Chọn thứ"
               options={days.map((day) => ({
                 value: day,
-                label: day
+                label: day,
               }))}
             />
           </Form.Item>
@@ -577,8 +575,8 @@ export default function LichHoc() {
                 rules={[
                   {
                     required: true,
-                    message: "Chọn giờ bắt đầu!"
-                  }
+                    message: "Chọn giờ bắt đầu!",
+                  },
                 ]}
               >
                 <TimePicker
@@ -596,8 +594,8 @@ export default function LichHoc() {
                 rules={[
                   {
                     required: true,
-                    message: "Chọn giờ kết thúc!"
-                  }
+                    message: "Chọn giờ kết thúc!",
+                  },
                 ]}
               >
                 <TimePicker
@@ -615,11 +613,15 @@ export default function LichHoc() {
             rules={[
               {
                 required: true,
-                message: "Nhập phòng học!"
-              }
+                whitespace: true,
+                message: "Nhập phòng học!",
+              },
             ]}
           >
-            <Input placeholder="Ví dụ: P101" />
+            <Input
+              placeholder="Ví dụ: P301"
+              maxLength={50}
+            />
           </Form.Item>
         </Form>
       </Modal>

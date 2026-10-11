@@ -1,5 +1,6 @@
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+
 import {
   Table,
   Button,
@@ -9,7 +10,6 @@ import {
   Modal,
   Form,
   Select,
-  DatePicker,
   Card,
   Typography,
   Popconfirm,
@@ -20,107 +20,226 @@ import {
   PlusOutlined,
   SearchOutlined,
   EditOutlined,
-  DeleteOutlined,
+  LockOutlined,
+  UnlockOutlined,
   EyeOutlined,
+  ReloadOutlined,
 } from "@ant-design/icons";
 
-const initialData = [
-  {
-    ma_hoc_vien: 1,
-    ho_ten: "Nguyễn Văn An",
-    ngay_sinh: "2005-03-15",
-    gioi_tinh: "Nam",
-    email: "an@gmail.com",
-    so_dien_thoai: "0912345678",
-    dia_chi: "Hà Nội",
-    trang_thai: "Đang học",
-  },
-  {
-    ma_hoc_vien: 2,
-    ho_ten: "Trần Thị Bình",
-    ngay_sinh: "2004-08-20",
-    gioi_tinh: "Nữ",
-    email: "binh@gmail.com",
-    so_dien_thoai: "0987654321",
-    dia_chi: "Thanh Hóa",
-    trang_thai: "Đang học",
-  },
-];
+import hocVienService from "../../services/hocVienService";
+
+
+function getErrorMessage(error) {
+  const detail = error?.response?.data?.detail;
+
+  if (typeof detail === "string") {
+    return detail;
+  }
+
+  if (Array.isArray(detail)) {
+    return detail.map((item) => item.msg).join("; ");
+  }
+
+  if (error?.response?.status === 401) {
+    return "Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.";
+  }
+
+  if (error?.response?.status === 403) {
+    return "Bạn không có quyền quản lý học viên.";
+  }
+
+  return "Có lỗi xảy ra khi kết nối với máy chủ.";
+}
+
 
 export default function HocVien() {
-  const [students, setStudents] = useState(initialData);
+  const [students, setStudents] = useState([]);
   const [searchText, setSearchText] = useState("");
+  const [search, setSearch] = useState("");
+
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
   const [viewingStudent, setViewingStudent] = useState(null);
 
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(8);
+  const [total, setTotal] = useState(0);
+
   const [form] = Form.useForm();
+  const [messageApi, contextHolder] = message.useMessage();
 
-  const filteredStudents = students.filter((student) => {
-    const keyword = searchText.toLowerCase();
 
-    return (
-      student.ho_ten.toLowerCase().includes(keyword) ||
-      (student.email || "").toLowerCase().includes(keyword) ||
-      (student.so_dien_thoai || "").includes(keyword)
-    );
-  });
+  // ==========================================
+  // 1. LẤY DANH SÁCH TỪ MYSQL
+  // ==========================================
+
+  const fetchStudents = useCallback(async () => {
+    setLoading(true);
+
+    try {
+      const result = await hocVienService.getAll({
+        search,
+        page,
+        page_size: pageSize,
+      });
+
+      setStudents(result.items || []);
+      setTotal(result.total || 0);
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }, [search, page, pageSize, messageApi]);
+
+
+  useEffect(() => {
+    fetchStudents();
+  }, [fetchStudents]);
+
+
+  // ==========================================
+  // 2. TÌM KIẾM
+  // ==========================================
+
+  const handleSearch = (value) => {
+    setSearch(value.trim());
+    setPage(1);
+  };
+
+
+  // ==========================================
+  // 3. MỞ FORM THÊM
+  // ==========================================
 
   const handleAdd = () => {
     setEditingStudent(null);
-    form.resetFields();
-    setIsModalOpen(true);
-  };
 
-  const handleEdit = (student) => {
-    setEditingStudent(student);
+    form.resetFields();
 
     form.setFieldsValue({
-      ...student,
+      trang_thai: true,
     });
 
     setIsModalOpen(true);
   };
 
+
+  // ==========================================
+  // 4. MỞ FORM SỬA
+  // ==========================================
+
+  const handleEdit = (student) => {
+    setEditingStudent(student);
+
+    form.resetFields();
+
+    form.setFieldsValue({
+      ho_ten: student.ho_ten,
+      ngay_sinh: student.ngay_sinh,
+      gioi_tinh: student.gioi_tinh,
+      email: student.email,
+      so_dien_thoai: student.so_dien_thoai,
+      dia_chi: student.dia_chi,
+      trang_thai: student.trang_thai,
+    });
+
+    setIsModalOpen(true);
+  };
+
+
+  // ==========================================
+  // 5. THÊM / SỬA VÀ LƯU MYSQL
+  // ==========================================
+
   const handleSave = async () => {
+    let values;
+
     try {
-      const values = await form.validateFields();
+      values = await form.validateFields();
+    } catch {
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const payload = {
+        ...values,
+        ho_ten: values.ho_ten.trim(),
+        ngay_sinh: values.ngay_sinh || null,
+        email: values.email?.trim() || null,
+        so_dien_thoai: values.so_dien_thoai?.trim() || null,
+        dia_chi: values.dia_chi?.trim() || null,
+        gioi_tinh: values.gioi_tinh || null,
+      };
 
       if (editingStudent) {
-        setStudents((prev) =>
-          prev.map((student) =>
-            student.ma_hoc_vien === editingStudent.ma_hoc_vien
-              ? { ...student, ...values }
-              : student
-          )
+        await hocVienService.update(
+          editingStudent.ma_hoc_vien,
+          payload
         );
 
-        message.success("Cập nhật học viên thành công!");
+        messageApi.success("Cập nhật học viên thành công!");
       } else {
-        const newStudent = {
-          ...values,
-          ma_hoc_vien: Date.now(),
-        };
+        await hocVienService.create({
+          ...payload,
+          ten_dang_nhap: values.ten_dang_nhap.trim(),
+          mat_khau: values.mat_khau,
+        });
 
-        setStudents((prev) => [...prev, newStudent]);
-
-        message.success("Thêm học viên thành công!");
+        messageApi.success("Thêm học viên thành công!");
       }
 
       setIsModalOpen(false);
+      setEditingStudent(null);
       form.resetFields();
-    } catch {
-      // Form chưa hợp lệ, Ant Design sẽ hiển thị lỗi.
+
+      if (!editingStudent && page !== 1) {
+        setPage(1);
+      } else {
+        await fetchStudents();
+      }
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleDelete = (id) => {
-    setStudents((prev) =>
-      prev.filter((student) => student.ma_hoc_vien !== id)
-    );
 
-    message.success("Đã xóa học viên khỏi danh sách!");
+  // ==========================================
+  // 6. KHÓA / MỞ TÀI KHOẢN
+  // ==========================================
+
+  const handleChangeStatus = async (student) => {
+    const newStatus = !student.trang_thai;
+
+    try {
+      await hocVienService.changeStatus(
+        student.ma_hoc_vien,
+        newStatus
+      );
+
+      messageApi.success(
+        newStatus
+          ? "Đã mở lại tài khoản học viên!"
+          : "Đã khóa tài khoản học viên!"
+      );
+
+      await fetchStudents();
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    }
   };
+
+
+  // ==========================================
+  // 7. CỘT BẢNG
+  // ==========================================
 
   const columns = [
     {
@@ -138,24 +257,27 @@ export default function HocVien() {
       title: "Giới tính",
       dataIndex: "gioi_tinh",
       key: "gioi_tinh",
+      render: (value) => value || "—",
     },
     {
       title: "Email",
       dataIndex: "email",
       key: "email",
+      render: (value) => value || "—",
     },
     {
       title: "Số điện thoại",
       dataIndex: "so_dien_thoai",
       key: "so_dien_thoai",
+      render: (value) => value || "—",
     },
     {
       title: "Trạng thái",
       dataIndex: "trang_thai",
       key: "trang_thai",
       render: (status) => (
-        <Tag color={status === "Đang học" ? "green" : "default"}>
-          {status}
+        <Tag color={status ? "green" : "red"}>
+          {status ? "Đang học" : "Ngừng học"}
         </Tag>
       ),
     },
@@ -166,30 +288,59 @@ export default function HocVien() {
         <Space>
           <Button
             icon={<EyeOutlined />}
+            title="Xem chi tiết"
             onClick={() => setViewingStudent(record)}
           />
 
           <Button
             icon={<EditOutlined />}
+            title="Chỉnh sửa"
             onClick={() => handleEdit(record)}
           />
 
           <Popconfirm
-            title="Xóa học viên?"
-            description="Anh có chắc muốn xóa học viên này?"
-            onConfirm={() => handleDelete(record.ma_hoc_vien)}
-            okText="Xóa"
+            title={
+              record.trang_thai
+                ? "Khóa tài khoản học viên?"
+                : "Mở lại tài khoản học viên?"
+            }
+            description={
+              record.trang_thai
+                ? "Học viên sẽ không thể đăng nhập."
+                : "Học viên sẽ có thể đăng nhập trở lại."
+            }
+            onConfirm={() => handleChangeStatus(record)}
+            okText="Xác nhận"
             cancelText="Hủy"
           >
-            <Button danger icon={<DeleteOutlined />} />
+            <Button
+              danger={record.trang_thai}
+              icon={
+                record.trang_thai
+                  ? <LockOutlined />
+                  : <UnlockOutlined />
+              }
+              title={
+                record.trang_thai
+                  ? "Khóa tài khoản"
+                  : "Mở tài khoản"
+              }
+            />
           </Popconfirm>
         </Space>
       ),
     },
   ];
 
+
+  // ==========================================
+  // 8. GIAO DIỆN
+  // ==========================================
+
   return (
     <div>
+      {contextHolder}
+
       <Typography.Title level={3}>
         Quản lý học viên
       </Typography.Title>
@@ -203,32 +354,65 @@ export default function HocVien() {
           }}
           wrap
         >
-          <Input
-            placeholder="Tìm kiếm học viên..."
+          <Input.Search
+            placeholder="Tìm tên, mã HV, email, số điện thoại..."
             prefix={<SearchOutlined />}
             value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            style={{ width: 300 }}
+            onChange={(e) => {
+              const value = e.target.value;
+              setSearchText(value);
+
+              if (!value) {
+                handleSearch("");
+              }
+            }}
+            onSearch={handleSearch}
+            style={{ width: 330 }}
             allowClear
+            enterButton
           />
 
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={handleAdd}
-          >
-            Thêm học viên
-          </Button>
+          <Space>
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={fetchStudents}
+              loading={loading}
+            >
+              Làm mới
+            </Button>
+
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={handleAdd}
+            >
+              Thêm học viên
+            </Button>
+          </Space>
         </Space>
 
         <Table
           columns={columns}
-          dataSource={filteredStudents}
+          dataSource={students}
           rowKey="ma_hoc_vien"
-          pagination={{ pageSize: 8 }}
+          loading={loading}
           scroll={{ x: 1000 }}
+          pagination={{
+            current: page,
+            pageSize,
+            total,
+            showSizeChanger: true,
+            pageSizeOptions: ["8", "10", "20", "50"],
+            showTotal: (count) => `Tổng ${count} học viên`,
+            onChange: (newPage, newPageSize) => {
+              setPage(newPage);
+              setPageSize(newPageSize);
+            },
+          }}
         />
       </Card>
+
+      {/* FORM THÊM / SỬA */}
 
       <Modal
         title={
@@ -238,24 +422,31 @@ export default function HocVien() {
         }
         open={isModalOpen}
         onOk={handleSave}
-        onCancel={() => setIsModalOpen(false)}
+        onCancel={() => {
+          setIsModalOpen(false);
+          setEditingStudent(null);
+          form.resetFields();
+        }}
         okText="Lưu"
         cancelText="Hủy"
+        confirmLoading={saving}
+        okButtonProps={{ disabled: saving }}
         destroyOnHidden
       >
         <Form
           form={form}
           layout="vertical"
           style={{ marginTop: 20 }}
+          initialValues={{ trang_thai: true }}
         >
           <Form.Item
             name="ho_ten"
             label="Họ và tên"
             rules={[
-              { required: true, message: "Nhập họ tên!" },
+              { required: true, whitespace: true, message: "Nhập họ tên!" },
             ]}
           >
-            <Input />
+            <Input maxLength={100} />
           </Form.Item>
 
           <Form.Item
@@ -263,6 +454,7 @@ export default function HocVien() {
             label="Giới tính"
           >
             <Select
+              allowClear
               options={[
                 { value: "Nam", label: "Nam" },
                 { value: "Nữ", label: "Nữ" },
@@ -278,19 +470,31 @@ export default function HocVien() {
               { type: "email", message: "Email không hợp lệ!" },
             ]}
           >
-            <Input />
+            <Input maxLength={100} />
           </Form.Item>
 
           <Form.Item
             name="so_dien_thoai"
             label="Số điện thoại"
+            rules={[
+              {
+                pattern: /^[0-9]{9,15}$/,
+                message: "Số điện thoại phải gồm 9–15 chữ số!",
+              },
+            ]}
           >
-            <Input />
+            <Input maxLength={15} />
           </Form.Item>
 
           <Form.Item
             name="ngay_sinh"
             label="Ngày sinh (YYYY-MM-DD)"
+            rules={[
+              {
+                pattern: /^\d{4}-\d{2}-\d{2}$/,
+                message: "Nhập ngày theo dạng YYYY-MM-DD!",
+              },
+            ]}
           >
             <Input placeholder="2005-12-07" />
           </Form.Item>
@@ -299,29 +503,69 @@ export default function HocVien() {
             name="dia_chi"
             label="Địa chỉ"
           >
-            <Input />
+            <Input maxLength={255} />
           </Form.Item>
+
+          {!editingStudent && (
+            <>
+              <Form.Item
+                name="ten_dang_nhap"
+                label="Tên đăng nhập"
+                rules={[
+                  {
+                    required: true,
+                    whitespace: true,
+                    message: "Nhập tên đăng nhập!",
+                  },
+                  {
+                    min: 3,
+                    message: "Tên đăng nhập tối thiểu 3 ký tự!",
+                  },
+                ]}
+              >
+                <Input
+                  placeholder="Ví dụ: HV061"
+                  maxLength={50}
+                />
+              </Form.Item>
+
+              <Form.Item
+                name="mat_khau"
+                label="Mật khẩu"
+                rules={[
+                  {
+                    required: true,
+                    message: "Nhập mật khẩu!",
+                  },
+                  {
+                    min: 8,
+                    message: "Mật khẩu tối thiểu 8 ký tự!",
+                  },
+                ]}
+              >
+                <Input.Password
+                  placeholder="Tối thiểu 8 ký tự"
+                  maxLength={128}
+                />
+              </Form.Item>
+            </>
+          )}
 
           <Form.Item
             name="trang_thai"
             label="Trạng thái"
-            initialValue="Đang học"
           >
             <Select
               options={[
-                {
-                  value: "Đang học",
-                  label: "Đang học",
-                },
-                {
-                  value: "Ngừng học",
-                  label: "Ngừng học",
-                },
+                { value: true, label: "Đang học" },
+                { value: false, label: "Ngừng học" },
               ]}
             />
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* XEM CHI TIẾT */}
 
       <Modal
         title="Thông tin học viên"
@@ -331,13 +575,52 @@ export default function HocVien() {
       >
         {viewingStudent && (
           <div style={{ lineHeight: 2 }}>
-            <p><b>Họ tên:</b> {viewingStudent.ho_ten}</p>
-            <p><b>Ngày sinh:</b> {viewingStudent.ngay_sinh}</p>
-            <p><b>Giới tính:</b> {viewingStudent.gioi_tinh}</p>
-            <p><b>Email:</b> {viewingStudent.email}</p>
-            <p><b>Số điện thoại:</b> {viewingStudent.so_dien_thoai}</p>
-            <p><b>Địa chỉ:</b> {viewingStudent.dia_chi}</p>
-            <p><b>Trạng thái:</b> {viewingStudent.trang_thai}</p>
+            <p>
+              <b>Mã học viên:</b>{" "}
+              {viewingStudent.ma_hoc_vien}
+            </p>
+
+            <p>
+              <b>Họ tên:</b>{" "}
+              {viewingStudent.ho_ten}
+            </p>
+
+            <p>
+              <b>Tên đăng nhập:</b>{" "}
+              {viewingStudent.ten_dang_nhap || "Chưa có tài khoản"}
+            </p>
+
+            <p>
+              <b>Ngày sinh:</b>{" "}
+              {viewingStudent.ngay_sinh || "—"}
+            </p>
+
+            <p>
+              <b>Giới tính:</b>{" "}
+              {viewingStudent.gioi_tinh || "—"}
+            </p>
+
+            <p>
+              <b>Email:</b>{" "}
+              {viewingStudent.email || "—"}
+            </p>
+
+            <p>
+              <b>Số điện thoại:</b>{" "}
+              {viewingStudent.so_dien_thoai || "—"}
+            </p>
+
+            <p>
+              <b>Địa chỉ:</b>{" "}
+              {viewingStudent.dia_chi || "—"}
+            </p>
+
+            <p>
+              <b>Trạng thái:</b>{" "}
+              {viewingStudent.trang_thai
+                ? "Đang học"
+                : "Ngừng học"}
+            </p>
           </div>
         )}
       </Modal>

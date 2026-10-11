@@ -1,10 +1,24 @@
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+
 import {
-  Card, Typography, Row, Col, Statistic,
-  Table, Tag, Space, Input, Select,
-  Button, Modal, Form, InputNumber,
-  Descriptions, Popconfirm, message
+  Card,
+  Typography,
+  Row,
+  Col,
+  Statistic,
+  Table,
+  Tag,
+  Space,
+  Input,
+  Select,
+  Button,
+  Modal,
+  Form,
+  InputNumber,
+  Descriptions,
+  Popconfirm,
+  message,
 } from "antd";
 
 import {
@@ -15,207 +29,261 @@ import {
   SearchOutlined,
   EyeOutlined,
   EditOutlined,
-  DeleteOutlined
+  PauseCircleOutlined,
+  PlayCircleOutlined,
+  ReloadOutlined,
 } from "@ant-design/icons";
 
-// Dữ liệu mẫu, chưa lấy từ MySQL
-const initialCourses = [
-  {
-    ma_khoa_hoc: 1,
-    ten_khoa_hoc: "Tiếng Anh giao tiếp cơ bản",
-    ngon_ngu: "Tiếng Anh",
-    mo_ta: "Rèn luyện kỹ năng nghe và nói cơ bản.",
-    so_buoi: 30,
-    muc_tieu: "Giao tiếp trong các tình huống thường ngày.",
-    trang_thai: "Đang mở"
-  },
-  {
-    ma_khoa_hoc: 2,
-    ten_khoa_hoc: "Luyện thi IELTS 5.5",
-    ngon_ngu: "Tiếng Anh",
-    mo_ta: "Luyện bốn kỹ năng theo cấu trúc IELTS.",
-    so_buoi: 48,
-    muc_tieu: "Đạt mục tiêu IELTS 5.5.",
-    trang_thai: "Đang mở"
-  },
-  {
-    ma_khoa_hoc: 3,
-    ten_khoa_hoc: "Luyện thi IELTS 6.5",
-    ngon_ngu: "Tiếng Anh",
-    mo_ta: "Luyện thi IELTS trình độ trung cấp.",
-    so_buoi: 60,
-    muc_tieu: "Đạt mục tiêu IELTS 6.5.",
-    trang_thai: "Đang mở"
-  },
-  {
-    ma_khoa_hoc: 4,
-    ten_khoa_hoc: "Tiếng Trung HSK 1",
-    ngon_ngu: "Tiếng Trung",
-    mo_ta: "Tiếng Trung dành cho người mới bắt đầu.",
-    so_buoi: 36,
-    muc_tieu: "Nắm kiến thức và từ vựng HSK 1.",
-    trang_thai: "Đang mở"
-  },
-  {
-    ma_khoa_hoc: 5,
-    ten_khoa_hoc: "Tiếng Trung HSK 2",
-    ngon_ngu: "Tiếng Trung",
-    mo_ta: "Tiếp tục phát triển nền tảng tiếng Trung.",
-    so_buoi: 40,
-    muc_tieu: "Đạt trình độ HSK 2.",
-    trang_thai: "Đang mở"
-  },
-  {
-    ma_khoa_hoc: 6,
-    ten_khoa_hoc: "Tiếng Nhật N5",
-    ngon_ngu: "Tiếng Nhật",
-    mo_ta: "Học bảng chữ cái, từ vựng và ngữ pháp N5.",
-    so_buoi: 45,
-    muc_tieu: "Đạt trình độ JLPT N5.",
-    trang_thai: "Đang mở"
-  },
-  {
-    ma_khoa_hoc: 7,
-    ten_khoa_hoc: "Tiếng Hàn TOPIK I",
-    ngon_ngu: "Tiếng Hàn",
-    mo_ta: "Khóa tiếng Hàn sơ cấp.",
-    so_buoi: 42,
-    muc_tieu: "Chuẩn bị cho kỳ thi TOPIK I.",
-    trang_thai: "Đang mở"
-  },
-  {
-    ma_khoa_hoc: 8,
-    ten_khoa_hoc: "Tiếng Anh cho trẻ em",
-    ngon_ngu: "Tiếng Anh",
-    mo_ta: "Phát triển tiếng Anh qua hoạt động tương tác.",
-    so_buoi: 32,
-    muc_tieu: "Xây dựng nền tảng tiếng Anh cho trẻ.",
-    trang_thai: "Tạm ngừng"
-  }
-];
+import khoaHocService from "../../services/khoaHocService";
 
 const statusOptions = [
-  { value: "Đang mở", label: "Đang mở" },
-  { value: "Tạm ngừng", label: "Tạm ngừng" }
+  { value: true, label: "Đang mở" },
+  { value: false, label: "Tạm ngừng" },
 ];
 
+const languageOptions = [
+  "Tiếng Anh",
+  "Tiếng Trung",
+  "Tiếng Nhật",
+  "Tiếng Hàn",
+  "Tiếng Pháp",
+].map((language) => ({
+  value: language,
+  label: language,
+}));
+
+function getErrorMessage(error) {
+  const detail = error?.response?.data?.detail;
+
+  if (typeof detail === "string") {
+    return detail;
+  }
+
+  if (Array.isArray(detail)) {
+    return detail.map((item) => item.msg).join("; ");
+  }
+
+  if (error?.response?.status === 401) {
+    return "Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.";
+  }
+
+  if (error?.response?.status === 403) {
+    return "Bạn không có quyền quản lý khóa học.";
+  }
+
+  return "Không thể kết nối đến máy chủ.";
+}
+
 export default function KhoaHoc() {
-  const [courses, setCourses] = useState(initialCourses);
+  const [courses, setCourses] = useState([]);
   const [searchText, setSearchText] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
+
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState(null);
   const [viewingCourse, setViewingCourse] = useState(null);
-  const [form] = Form.useForm();
 
-  const activeCount = courses.filter(
-    (c) => c.trang_thai === "Đang mở"
-  ).length;
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const inactiveCount = courses.length - activeCount;
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(6);
+  const [total, setTotal] = useState(0);
 
-  const filteredCourses = courses.filter((course) => {
-    const keyword = searchText.trim().toLowerCase();
-
-    const matchesSearch =
-      course.ten_khoa_hoc.toLowerCase().includes(keyword) ||
-      course.ngon_ngu.toLowerCase().includes(keyword) ||
-      String(course.ma_khoa_hoc).includes(keyword);
-
-    const matchesStatus =
-      filterStatus === "all" ||
-      course.trang_thai === filterStatus;
-
-    return matchesSearch && matchesStatus;
+  const [stats, setStats] = useState({
+    total: 0,
+    active: 0,
+    inactive: 0,
   });
 
+  const [form] = Form.useForm();
+  const [messageApi, contextHolder] = message.useMessage();
+
+  // 1. Lấy danh sách khóa học từ MySQL
+  const fetchCourses = useCallback(async () => {
+    setLoading(true);
+
+    try {
+      const data = await khoaHocService.getAll({
+        search: searchText.trim(),
+        status:
+          filterStatus === "all"
+            ? undefined
+            : filterStatus === "active",
+        page,
+        page_size: pageSize,
+      });
+
+      setCourses(data.items || []);
+      setTotal(data.total || 0);
+      setStats(
+        data.stats || {
+          total: 0,
+          active: 0,
+          inactive: 0,
+        }
+      );
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    searchText,
+    filterStatus,
+    page,
+    pageSize,
+    messageApi,
+  ]);
+
+  useEffect(() => {
+    fetchCourses();
+  }, [fetchCourses]);
+
+  // 2. Mở form thêm
   const handleAdd = () => {
     setEditingCourse(null);
     form.resetFields();
-    form.setFieldsValue({ trang_thai: "Đang mở" });
+    form.setFieldsValue({ trang_thai: true });
     setModalOpen(true);
   };
 
+  // 3. Mở form sửa
   const handleEdit = (course) => {
     setEditingCourse(course);
-    form.setFieldsValue(course);
+    form.resetFields();
+
+    form.setFieldsValue({
+      ten_khoa_hoc: course.ten_khoa_hoc,
+      ngon_ngu: course.ngon_ngu,
+      so_buoi: course.so_buoi,
+      muc_tieu: course.muc_tieu,
+      mo_ta: course.mo_ta,
+      trang_thai: course.trang_thai,
+    });
+
     setModalOpen(true);
   };
 
+  // 4. Lưu khóa học vào MySQL
   const handleSave = async () => {
+    let values;
+
     try {
-      const values = await form.validateFields();
+      values = await form.validateFields();
+    } catch {
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const payload = {
+        ten_khoa_hoc: values.ten_khoa_hoc.trim(),
+        ngon_ngu: values.ngon_ngu.trim(),
+        so_buoi: values.so_buoi,
+        muc_tieu: values.muc_tieu?.trim() || null,
+        mo_ta: values.mo_ta?.trim() || null,
+        trang_thai: values.trang_thai,
+      };
 
       if (editingCourse) {
-        setCourses((prev) =>
-          prev.map((course) =>
-            course.ma_khoa_hoc === editingCourse.ma_khoa_hoc
-              ? { ...course, ...values }
-              : course
-          )
+        await khoaHocService.update(
+          editingCourse.ma_khoa_hoc,
+          payload
         );
-        message.success("Cập nhật khóa học thành công!");
-      } else {
-        const nextId =
-          Math.max(0, ...courses.map((c) => c.ma_khoa_hoc)) + 1;
 
-        setCourses((prev) => [
-          ...prev,
-          { ma_khoa_hoc: nextId, ...values }
-        ]);
-        message.success("Thêm khóa học thành công!");
+        messageApi.success("Cập nhật khóa học thành công!");
+      } else {
+        await khoaHocService.create(payload);
+        messageApi.success("Thêm khóa học thành công!");
       }
 
       setModalOpen(false);
       setEditingCourse(null);
       form.resetFields();
-    } catch {
-      // Ant Design hiển thị lỗi tại các trường không hợp lệ.
+
+      // Khóa học mới được xếp theo mã tăng dần,
+      // vì vậy chuyển đến trang cuối để nhìn thấy.
+      if (!editingCourse) {
+        const newTotal = total + 1;
+        const lastPage = Math.ceil(newTotal / pageSize);
+
+        if (page !== lastPage) {
+          setPage(lastPage);
+        } else {
+          await fetchCourses();
+        }
+      } else {
+        await fetchCourses();
+      }
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleDelete = (id) => {
-    setCourses((prev) =>
-      prev.filter((course) => course.ma_khoa_hoc !== id)
-    );
-    message.success("Đã xóa khóa học khỏi dữ liệu mẫu!");
+  // 5. Tạm ngừng hoặc mở lại khóa học
+  const handleChangeStatus = async (course) => {
+    const newStatus = !course.trang_thai;
+
+    try {
+      await khoaHocService.changeStatus(
+        course.ma_khoa_hoc,
+        newStatus
+      );
+
+      messageApi.success(
+        newStatus
+          ? "Đã mở lại khóa học!"
+          : "Đã tạm ngừng khóa học!"
+      );
+
+      await fetchCourses();
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    }
   };
 
+  // 6. Các cột bảng
   const columns = [
     {
       title: "Mã KH",
       dataIndex: "ma_khoa_hoc",
-      width: 85
+      width: 85,
     },
     {
       title: "Tên khóa học",
       dataIndex: "ten_khoa_hoc",
-      render: (value) => <strong>{value}</strong>
+      render: (value) => <strong>{value}</strong>,
     },
     {
       title: "Ngôn ngữ",
       dataIndex: "ngon_ngu",
-      render: (value) => <Tag color="blue">{value}</Tag>
+      render: (value) => (
+        <Tag color="blue">{value}</Tag>
+      ),
     },
     {
       title: "Số buổi",
       dataIndex: "so_buoi",
       width: 95,
-      align: "center"
+      align: "center",
     },
     {
       title: "Mục tiêu",
       dataIndex: "muc_tieu",
-      ellipsis: true
+      ellipsis: true,
     },
     {
       title: "Trạng thái",
       dataIndex: "trang_thai",
       render: (status) => (
-        <Tag color={status === "Đang mở" ? "green" : "red"}>
-          {status}
+        <Tag color={status ? "green" : "red"}>
+          {status ? "Đang mở" : "Tạm ngừng"}
         </Tag>
-      )
+      ),
     },
     {
       title: "Thao tác",
@@ -237,25 +305,44 @@ export default function KhoaHoc() {
           />
 
           <Popconfirm
-            title="Xóa khóa học?"
-            description="Chỉ xóa khỏi dữ liệu mẫu hiện tại."
-            okText="Xóa"
+            title={
+              record.trang_thai
+                ? "Tạm ngừng khóa học?"
+                : "Mở lại khóa học?"
+            }
+            description={
+              record.trang_thai
+                ? "Khóa học sẽ chuyển sang trạng thái tạm ngừng."
+                : "Khóa học sẽ được mở lại."
+            }
+            okText="Xác nhận"
             cancelText="Hủy"
-            onConfirm={() => handleDelete(record.ma_khoa_hoc)}
+            onConfirm={() => handleChangeStatus(record)}
           >
             <Button
-              danger
-              icon={<DeleteOutlined />}
-              title="Xóa"
+              danger={record.trang_thai}
+              icon={
+                record.trang_thai
+                  ? <PauseCircleOutlined />
+                  : <PlayCircleOutlined />
+              }
+              title={
+                record.trang_thai
+                  ? "Tạm ngừng"
+                  : "Mở lại"
+              }
             />
           </Popconfirm>
         </Space>
-      )
-    }
+      ),
+    },
   ];
 
   return (
     <div>
+      {contextHolder}
+
+      {/* Tiêu đề */}
       <div style={{ marginBottom: 24 }}>
         <Typography.Title
           level={3}
@@ -270,12 +357,16 @@ export default function KhoaHoc() {
         </Typography.Text>
       </div>
 
-      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+      {/* Thẻ thống kê */}
+      <Row
+        gutter={[16, 16]}
+        style={{ marginBottom: 24 }}
+      >
         <Col xs={24} md={8}>
           <Card>
             <Statistic
               title="Tổng khóa học"
-              value={courses.length}
+              value={stats.total}
               prefix={<BookOutlined />}
               valueStyle={{ color: "#1677ff" }}
             />
@@ -286,7 +377,7 @@ export default function KhoaHoc() {
           <Card>
             <Statistic
               title="Đang mở"
-              value={activeCount}
+              value={stats.active}
               prefix={<CheckCircleOutlined />}
               valueStyle={{ color: "#52c41a" }}
             />
@@ -297,7 +388,7 @@ export default function KhoaHoc() {
           <Card>
             <Statistic
               title="Tạm ngừng"
-              value={inactiveCount}
+              value={stats.inactive}
               prefix={<StopOutlined />}
               valueStyle={{ color: "#ff4d4f" }}
             />
@@ -305,13 +396,14 @@ export default function KhoaHoc() {
         </Col>
       </Row>
 
+      {/* Danh sách khóa học */}
       <Card>
         <Space
           wrap
           style={{
             display: "flex",
             justifyContent: "space-between",
-            marginBottom: 20
+            marginBottom: 20,
           }}
         >
           <Space wrap>
@@ -320,44 +412,75 @@ export default function KhoaHoc() {
               prefix={<SearchOutlined />}
               style={{ width: 300 }}
               value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
+              onChange={(e) => {
+                setSearchText(e.target.value);
+                setPage(1);
+              }}
               allowClear
             />
 
             <Select
               style={{ width: 160 }}
               value={filterStatus}
-              onChange={setFilterStatus}
+              onChange={(value) => {
+                setFilterStatus(value);
+                setPage(1);
+              }}
               options={[
-                { value: "all", label: "Tất cả trạng thái" },
-                ...statusOptions
+                {
+                  value: "all",
+                  label: "Tất cả trạng thái",
+                },
+                {
+                  value: "active",
+                  label: "Đang mở",
+                },
+                {
+                  value: "inactive",
+                  label: "Tạm ngừng",
+                },
               ]}
             />
           </Space>
 
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={handleAdd}
-          >
-            Thêm khóa học
-          </Button>
+          <Space>
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={fetchCourses}
+              loading={loading}
+            >
+              Làm mới
+            </Button>
+
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={handleAdd}
+            >
+              Thêm khóa học
+            </Button>
+          </Space>
         </Space>
 
         <Table
           columns={columns}
-          dataSource={filteredCourses}
+          dataSource={courses}
           rowKey="ma_khoa_hoc"
+          loading={loading}
           pagination={{
-            pageSize: 6,
+            current: page,
+            pageSize,
+            total,
             showSizeChanger: false,
-            showTotal: (total) => `Tổng ${total} khóa học`
+            showTotal: (count) =>
+              `Tổng ${count} khóa học`,
+            onChange: setPage,
           }}
           scroll={{ x: 1100 }}
         />
       </Card>
 
-      {/* Biểu mẫu thêm / sửa khóa học */}
+      {/* Form thêm / sửa khóa học */}
       <Modal
         title={
           editingCourse
@@ -373,21 +496,30 @@ export default function KhoaHoc() {
         }}
         okText="Lưu thông tin"
         cancelText="Hủy"
+        confirmLoading={saving}
         width={650}
       >
         <Form
           form={form}
           layout="vertical"
           style={{ marginTop: 20 }}
+          initialValues={{ trang_thai: true }}
         >
           <Form.Item
             name="ten_khoa_hoc"
             label="Tên khóa học"
             rules={[
-              { required: true, message: "Nhập tên khóa học!" }
+              {
+                required: true,
+                whitespace: true,
+                message: "Nhập tên khóa học!",
+              },
             ]}
           >
-            <Input placeholder="Ví dụ: Tiếng Anh giao tiếp" />
+            <Input
+              placeholder="Ví dụ: Tiếng Anh giao tiếp"
+              maxLength={150}
+            />
           </Form.Item>
 
           <Row gutter={16}>
@@ -396,18 +528,16 @@ export default function KhoaHoc() {
                 name="ngon_ngu"
                 label="Ngôn ngữ"
                 rules={[
-                  { required: true, message: "Chọn ngôn ngữ!" }
+                  {
+                    required: true,
+                    message: "Chọn ngôn ngữ!",
+                  },
                 ]}
               >
                 <Select
+                  showSearch
                   placeholder="Chọn ngôn ngữ"
-                  options={[
-                    { value: "Tiếng Anh", label: "Tiếng Anh" },
-                    { value: "Tiếng Trung", label: "Tiếng Trung" },
-                    { value: "Tiếng Nhật", label: "Tiếng Nhật" },
-                    { value: "Tiếng Hàn", label: "Tiếng Hàn" },
-                    { value: "Tiếng Pháp", label: "Tiếng Pháp" }
-                  ]}
+                  options={languageOptions}
                 />
               </Form.Item>
             </Col>
@@ -417,12 +547,16 @@ export default function KhoaHoc() {
                 name="so_buoi"
                 label="Số buổi học"
                 rules={[
-                  { required: true, message: "Nhập số buổi!" }
+                  {
+                    required: true,
+                    message: "Nhập số buổi!",
+                  },
                 ]}
               >
                 <InputNumber
                   min={1}
                   max={500}
+                  precision={0}
                   style={{ width: "100%" }}
                   placeholder="Ví dụ: 30"
                 />
@@ -454,7 +588,10 @@ export default function KhoaHoc() {
             name="trang_thai"
             label="Trạng thái"
             rules={[
-              { required: true, message: "Chọn trạng thái!" }
+              {
+                required: true,
+                message: "Chọn trạng thái!",
+              },
             ]}
           >
             <Select options={statusOptions} />
@@ -462,7 +599,7 @@ export default function KhoaHoc() {
         </Form>
       </Modal>
 
-      {/* Cửa sổ xem chi tiết */}
+      {/* Xem chi tiết khóa học */}
       <Modal
         title="Chi tiết khóa học"
         open={!!viewingCourse}
@@ -484,32 +621,32 @@ export default function KhoaHoc() {
               {
                 key: "id",
                 label: "Mã khóa học",
-                children: viewingCourse.ma_khoa_hoc
+                children: viewingCourse.ma_khoa_hoc,
               },
               {
                 key: "name",
                 label: "Tên khóa học",
-                children: viewingCourse.ten_khoa_hoc
+                children: viewingCourse.ten_khoa_hoc,
               },
               {
                 key: "language",
                 label: "Ngôn ngữ",
-                children: viewingCourse.ngon_ngu
+                children: viewingCourse.ngon_ngu,
               },
               {
                 key: "lessons",
                 label: "Số buổi",
-                children: viewingCourse.so_buoi
+                children: viewingCourse.so_buoi,
               },
               {
                 key: "goal",
                 label: "Mục tiêu",
-                children: viewingCourse.muc_tieu || "—"
+                children: viewingCourse.muc_tieu || "—",
               },
               {
                 key: "description",
                 label: "Mô tả",
-                children: viewingCourse.mo_ta || "—"
+                children: viewingCourse.mo_ta || "—",
               },
               {
                 key: "status",
@@ -517,15 +654,17 @@ export default function KhoaHoc() {
                 children: (
                   <Tag
                     color={
-                      viewingCourse.trang_thai === "Đang mở"
+                      viewingCourse.trang_thai
                         ? "green"
                         : "red"
                     }
                   >
-                    {viewingCourse.trang_thai}
+                    {viewingCourse.trang_thai
+                      ? "Đang mở"
+                      : "Tạm ngừng"}
                   </Tag>
-                )
-              }
+                ),
+              },
             ]}
           />
         )}

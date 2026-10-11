@@ -78,4 +78,21 @@ def get_tables():
 def get_hoc_vien(db: Session = Depends(get_db)):
     return db.query(HocVien).all()
 
+from routers.hoc_vien import router as hoc_vien_router
+app.include_router(hoc_vien_router)
 
+from routers.giao_vien import router as giao_vien_router
+app.include_router(giao_vien_router)
+
+from routers.khoa_hoc import router as khoa_hoc_router
+app.include_router(khoa_hoc_router)
+
+
+from routers.lop_hoc import router as lop_hoc_router
+app.include_router(lop_hoc_router)
+
+from routers.lich_hoc import router as lich_hoc_router
+app.include_router(lich_hoc_router)
+
+from routers.thong_ke import router as thong_ke_router
+app.include_router(thong_ke_router)

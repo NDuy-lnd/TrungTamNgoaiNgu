@@ -1,334 +1,318 @@
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Card, Typography, Row, Col, Statistic, Table,
   Button, Input, Select, Space, Tag, Modal,
   Form, InputNumber, DatePicker, Descriptions,
-  Popconfirm, message, Tabs, List, Empty
+  Popconfirm, message, List, Empty
 } from "antd";
 import {
   PlusOutlined, SearchOutlined, EditOutlined,
   EyeOutlined, DeleteOutlined, TeamOutlined,
   BookOutlined, ClockCircleOutlined,
-  UserAddOutlined
+  UserAddOutlined, ReloadOutlined
 } from "@ant-design/icons";
 import dayjs from "dayjs";
-
-// Dữ liệu mẫu khóa học
-const courses = [
-  { id: 1, name: "Tiếng Anh giao tiếp cơ bản" },
-  { id: 2, name: "Luyện thi IELTS 5.5" },
-  { id: 3, name: "Luyện thi IELTS 6.5" },
-  { id: 4, name: "Tiếng Trung HSK 1" },
-  { id: 5, name: "Tiếng Trung HSK 2" },
-  { id: 6, name: "Tiếng Nhật N5" },
-  { id: 7, name: "Tiếng Hàn TOPIK I" },
-  { id: 8, name: "Tiếng Anh cho trẻ em" }
-];
-
-// Dữ liệu mẫu giáo viên
-const teachers = [
-  { id: 1, name: "Nguyễn Văn Minh" },
-  { id: 2, name: "Trần Thị Lan" },
-  { id: 3, name: "Lê Quốc Huy" },
-  { id: 4, name: "Phạm Thị Hương" },
-  { id: 5, name: "Đỗ Văn Nam" },
-  { id: 6, name: "Vũ Thị Mai" },
-  { id: 7, name: "Hoàng Đức Anh" },
-  { id: 8, name: "Bùi Thị Ngọc" },
-  { id: 9, name: "Ngô Minh Tuấn" },
-  { id: 10, name: "Đặng Thị Thu" }
-];
-
-// Học viên mẫu để thử xếp lớp
-const students = Array.from({ length: 60 }, (_, i) => ({
-  id: i + 1,
-  name: `Học viên mẫu ${i + 1}`
-}));
-
-const initialClasses = [
-  {
-    ma_lop: 1, ten_lop: "Giao tiếp A01",
-    ma_khoa_hoc: 1, ma_giao_vien: 1,
-    si_so_toi_da: 20, ngay_bat_dau: "2026-09-01",
-    ngay_ket_thuc: "2026-12-01", trang_thai: "Đang học"
-  },
-  {
-    ma_lop: 2, ten_lop: "IELTS 5.5 - A01",
-    ma_khoa_hoc: 2, ma_giao_vien: 1,
-    si_so_toi_da: 20, ngay_bat_dau: "2026-09-05",
-    ngay_ket_thuc: "2027-01-05", trang_thai: "Đang học"
-  },
-  {
-    ma_lop: 3, ten_lop: "IELTS 6.5 - A01",
-    ma_khoa_hoc: 3, ma_giao_vien: 9,
-    si_so_toi_da: 20, ngay_bat_dau: "2026-09-10",
-    ngay_ket_thuc: "2027-02-10", trang_thai: "Đang học"
-  },
-  {
-    ma_lop: 4, ten_lop: "HSK 1 - T01",
-    ma_khoa_hoc: 4, ma_giao_vien: 2,
-    si_so_toi_da: 15, ngay_bat_dau: "2026-09-15",
-    ngay_ket_thuc: "2026-12-15", trang_thai: "Đang học"
-  },
-  {
-    ma_lop: 5, ten_lop: "HSK 2 - T01",
-    ma_khoa_hoc: 5, ma_giao_vien: 6,
-    si_so_toi_da: 15, ngay_bat_dau: "2026-09-20",
-    ngay_ket_thuc: "2027-01-20", trang_thai: "Đang học"
-  },
-  {
-    ma_lop: 6, ten_lop: "JLPT N5 - N01",
-    ma_khoa_hoc: 6, ma_giao_vien: 3,
-    si_so_toi_da: 20, ngay_bat_dau: "2026-09-01",
-    ngay_ket_thuc: "2027-01-01", trang_thai: "Đang học"
-  },
-  {
-    ma_lop: 7, ten_lop: "TOPIK I - H01",
-    ma_khoa_hoc: 7, ma_giao_vien: 4,
-    si_so_toi_da: 20, ngay_bat_dau: "2026-09-12",
-    ngay_ket_thuc: "2027-01-12", trang_thai: "Đang học"
-  },
-  {
-    ma_lop: 8, ten_lop: "Giao tiếp A02",
-    ma_khoa_hoc: 1, ma_giao_vien: 5,
-    si_so_toi_da: 20, ngay_bat_dau: "2026-09-25",
-    ngay_ket_thuc: "2026-12-25", trang_thai: "Đang học"
-  },
-  {
-    ma_lop: 9, ten_lop: "IELTS 5.5 - A02",
-    ma_khoa_hoc: 2, ma_giao_vien: 9,
-    si_so_toi_da: 20, ngay_bat_dau: "2026-11-01",
-    ngay_ket_thuc: "2027-03-01", trang_thai: "Sắp mở"
-  },
-  {
-    ma_lop: 10, ten_lop: "HSK 1 - T02",
-    ma_khoa_hoc: 4, ma_giao_vien: 2,
-    si_so_toi_da: 15, ngay_bat_dau: "2026-11-05",
-    ngay_ket_thuc: "2027-02-05", trang_thai: "Sắp mở"
-  },
-  {
-    ma_lop: 11, ten_lop: "TOPIK I - H02",
-    ma_khoa_hoc: 7, ma_giao_vien: 8,
-    si_so_toi_da: 20, ngay_bat_dau: "2026-11-10",
-    ngay_ket_thuc: "2027-03-10", trang_thai: "Sắp mở"
-  },
-  {
-    ma_lop: 12, ten_lop: "Giao tiếp A00",
-    ma_khoa_hoc: 1, ma_giao_vien: 1,
-    si_so_toi_da: 20, ngay_bat_dau: "2026-01-05",
-    ngay_ket_thuc: "2026-04-05", trang_thai: "Đã kết thúc"
-  },
-  {
-    ma_lop: 13, ten_lop: "JLPT N5 - N00",
-    ma_khoa_hoc: 6, ma_giao_vien: 7,
-    si_so_toi_da: 20, ngay_bat_dau: "2026-02-01",
-    ngay_ket_thuc: "2026-06-01", trang_thai: "Đã kết thúc"
-  },
-  {
-    ma_lop: 14, ten_lop: "HSK 1 - T00",
-    ma_khoa_hoc: 4, ma_giao_vien: 10,
-    si_so_toi_da: 15, ngay_bat_dau: "2026-01-10",
-    ngay_ket_thuc: "2026-04-10", trang_thai: "Đã kết thúc"
-  }
-];
+import lopHocService from "../../services/lopHocService";
 
 const statusOptions = [
   { value: "Sắp mở", label: "Sắp mở" },
   { value: "Đang học", label: "Đang học" },
-  { value: "Đã kết thúc", label: "Đã kết thúc" }
+  { value: "Đã kết thúc", label: "Đã kết thúc" },
 ];
 
 const statusColor = {
   "Sắp mở": "orange",
   "Đang học": "green",
-  "Đã kết thúc": "default"
+  "Đã kết thúc": "default",
 };
 
+function getErrorMessage(error) {
+  const detail = error?.response?.data?.detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail.map((x) => x.msg).join("; ");
+  }
+  return "Không thể kết nối đến máy chủ.";
+}
+
 export default function LopHoc() {
-  const [classes, setClasses] = useState(initialClasses);
-  const [enrollments, setEnrollments] = useState({});
+  const [classes, setClasses] = useState([]);
+  const [courses, setCourses] = useState([]);
+  const [teachers, setTeachers] = useState([]);
+  const [students, setStudents] = useState([]);
+
   const [searchText, setSearchText] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
+
   const [modalOpen, setModalOpen] = useState(false);
   const [editingClass, setEditingClass] = useState(null);
   const [viewingClass, setViewingClass] = useState(null);
+
   const [enrollingClass, setEnrollingClass] = useState(null);
   const [selectedStudents, setSelectedStudents] = useState([]);
+  const [classStudents, setClassStudents] = useState([]);
+
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [enrollmentLoading, setEnrollmentLoading] = useState(false);
+
+  const [page, setPage] = useState(1);
+  const pageSize = 7;
+  const [total, setTotal] = useState(0);
+
+  const [counts, setCounts] = useState({
+    total: 0,
+    active: 0,
+    upcoming: 0,
+    finished: 0,
+  });
+
   const [form] = Form.useForm();
+  const [messageApi, contextHolder] = message.useMessage();
+
+  // Danh sách lớp và thống kê
+  const fetchClasses = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await lopHocService.getAll({
+        search: searchText.trim(),
+        status:
+          filterStatus === "all" ? undefined : filterStatus,
+        page,
+        page_size: pageSize,
+      });
+
+      setClasses(data.items || []);
+      setTotal(data.total || 0);
+      setCounts(data.stats || {
+        total: 0,
+        active: 0,
+        upcoming: 0,
+        finished: 0,
+      });
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }, [searchText, filterStatus, page, messageApi]);
+
+  // Khóa học, giáo viên và học viên từ MySQL
+  const fetchOptions = useCallback(async () => {
+    try {
+      const data = await lopHocService.getOptions();
+      setCourses(data.courses || []);
+      setTeachers(data.teachers || []);
+      setStudents(data.students || []);
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    }
+  }, [messageApi]);
+
+  useEffect(() => {
+    fetchClasses();
+  }, [fetchClasses]);
+
+  useEffect(() => {
+    fetchOptions();
+  }, [fetchOptions]);
 
   const courseName = (id) =>
-    courses.find((c) => c.id === id)?.name || "Chưa xác định";
+    courses.find((c) => c.ma_khoa_hoc === id)?.ten_khoa_hoc
+    || "Chưa xác định";
 
   const teacherName = (id) =>
-    teachers.find((t) => t.id === id)?.name || "Chưa phân công";
-
-  const getStudentIds = (classId) => enrollments[classId] || [];
-
-  const filteredClasses = classes.filter((item) => {
-    const keyword = searchText.trim().toLowerCase();
-
-    const matchesSearch =
-      item.ten_lop.toLowerCase().includes(keyword) ||
-      courseName(item.ma_khoa_hoc).toLowerCase().includes(keyword) ||
-      teacherName(item.ma_giao_vien).toLowerCase().includes(keyword);
-
-    const matchesStatus =
-      filterStatus === "all" || item.trang_thai === filterStatus;
-
-    return matchesSearch && matchesStatus;
-  });
+    teachers.find((t) => t.ma_giao_vien === id)?.ho_ten
+    || "Chưa phân công";
 
   const handleAdd = () => {
     setEditingClass(null);
     form.resetFields();
     form.setFieldsValue({
       trang_thai: "Sắp mở",
-      si_so_toi_da: 20
+      si_so_toi_da: 20,
     });
     setModalOpen(true);
   };
 
   const handleEdit = (item) => {
     setEditingClass(item);
+    form.resetFields();
     form.setFieldsValue({
       ...item,
       ngay_bat_dau: item.ngay_bat_dau
-        ? dayjs(item.ngay_bat_dau)
-        : null,
+        ? dayjs(item.ngay_bat_dau) : null,
       ngay_ket_thuc: item.ngay_ket_thuc
-        ? dayjs(item.ngay_ket_thuc)
-        : null
+        ? dayjs(item.ngay_ket_thuc) : null,
     });
     setModalOpen(true);
   };
 
   const handleSave = async () => {
+    let values;
     try {
-      const values = await form.validateFields();
+      values = await form.validateFields();
+    } catch {
+      return;
+    }
 
-      const start = values.ngay_bat_dau;
-      const end = values.ngay_ket_thuc;
+    if (values.ngay_ket_thuc.isBefore(
+      values.ngay_bat_dau, "day"
+    )) {
+      messageApi.error(
+        "Ngày kết thúc phải từ ngày bắt đầu trở đi!"
+      );
+      return;
+    }
 
-      if (end.isBefore(start, "day")) {
-        message.error("Ngày kết thúc phải sau ngày bắt đầu!");
-        return;
-      }
+    const payload = {
+      ten_lop: values.ten_lop.trim(),
+      ma_khoa_hoc: values.ma_khoa_hoc,
+      ma_giao_vien: values.ma_giao_vien ?? null,
+      si_so_toi_da: values.si_so_toi_da,
+      ngay_bat_dau:
+        values.ngay_bat_dau.format("YYYY-MM-DD"),
+      ngay_ket_thuc:
+        values.ngay_ket_thuc.format("YYYY-MM-DD"),
+      trang_thai: values.trang_thai,
+    };
 
-      const data = {
-        ...values,
-        ngay_bat_dau: start.format("YYYY-MM-DD"),
-        ngay_ket_thuc: end.format("YYYY-MM-DD")
-      };
-
+    setSaving(true);
+    try {
       if (editingClass) {
-        if (
-          getStudentIds(editingClass.ma_lop).length >
-          data.si_so_toi_da
-        ) {
-          message.error("Sĩ số tối đa nhỏ hơn số học viên đã xếp!");
-          return;
-        }
-
-        setClasses((prev) =>
-          prev.map((item) =>
-            item.ma_lop === editingClass.ma_lop
-              ? { ...item, ...data }
-              : item
-          )
+        await lopHocService.update(
+          editingClass.ma_lop, payload
         );
-        message.success("Cập nhật lớp học thành công!");
+        messageApi.success("Cập nhật lớp học thành công!");
       } else {
-        const nextId =
-          Math.max(0, ...classes.map((c) => c.ma_lop)) + 1;
-
-        setClasses((prev) => [
-          ...prev,
-          { ma_lop: nextId, ...data }
-        ]);
-        message.success("Thêm lớp học thành công!");
+        await lopHocService.create(payload);
+        messageApi.success("Thêm lớp học thành công!");
       }
 
       setModalOpen(false);
       setEditingClass(null);
       form.resetFields();
-    } catch {
-      // Ant Design hiển thị lỗi xác thực biểu mẫu.
+
+      if (!editingClass && filterStatus === "all"
+          && !searchText.trim()) {
+        const lastPage = Math.ceil((total + 1) / pageSize);
+        if (page !== lastPage) {
+          setPage(lastPage);
+        } else {
+          await fetchClasses();
+        }
+      } else {
+        await fetchClasses();
+      }
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleDelete = (classId) => {
-    setClasses((prev) =>
-      prev.filter((c) => c.ma_lop !== classId)
-    );
-
-    setEnrollments((prev) => {
-      const updated = { ...prev };
-      delete updated[classId];
-      return updated;
-    });
-
-    message.success("Đã xóa lớp khỏi dữ liệu mẫu!");
+  const handleDelete = async (item) => {
+    try {
+      await lopHocService.delete(item.ma_lop);
+      messageApi.success("Đã xóa lớp học!");
+      if (classes.length === 1 && page > 1) {
+        setPage(page - 1);
+      } else {
+        await fetchClasses();
+      }
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    }
   };
 
-  const openEnrollment = (item) => {
-    setEnrollingClass(item);
-    setSelectedStudents(getStudentIds(item.ma_lop));
+  // Mở cửa sổ xếp học viên
+  const openEnrollment = async (item) => {
+    setEnrollmentLoading(true);
+    try {
+      const data = await lopHocService.getStudents(
+        item.ma_lop
+      );
+      setClassStudents(data);
+      setSelectedStudents(
+        data
+          .filter((s) => s.trang_thai === "Đang học")
+          .map((s) => s.ma_hoc_vien)
+      );
+      setEnrollingClass(item);
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    } finally {
+      setEnrollmentLoading(false);
+    }
   };
 
-  const saveEnrollment = () => {
+  // Lưu xếp lớp vào MySQL
+  const saveEnrollment = async () => {
     if (!enrollingClass) return;
 
-    if (selectedStudents.length > enrollingClass.si_so_toi_da) {
-      message.error("Số học viên vượt quá sĩ số tối đa!");
+    if (
+      selectedStudents.length >
+      enrollingClass.si_so_toi_da
+    ) {
+      messageApi.error("Số học viên vượt quá sĩ số tối đa!");
       return;
     }
 
-    setEnrollments((prev) => ({
-      ...prev,
-      [enrollingClass.ma_lop]: selectedStudents
-    }));
+    setEnrollmentLoading(true);
+    try {
+      await lopHocService.saveStudents(
+        enrollingClass.ma_lop,
+        selectedStudents
+      );
 
-    setEnrollingClass(null);
-    message.success("Cập nhật danh sách lớp thành công!");
+      messageApi.success(
+        "Cập nhật danh sách lớp thành công!"
+      );
+      setEnrollingClass(null);
+      await fetchClasses();
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    } finally {
+      setEnrollmentLoading(false);
+    }
   };
 
   const columns = [
     {
       title: "Mã lớp",
       dataIndex: "ma_lop",
-      width: 85
+      width: 85,
     },
     {
       title: "Tên lớp",
       dataIndex: "ten_lop",
-      render: (text) => <strong>{text}</strong>
+      render: (text) => <strong>{text}</strong>,
     },
     {
       title: "Khóa học",
-      dataIndex: "ma_khoa_hoc",
-      render: (id) => courseName(id)
+      dataIndex: "ten_khoa_hoc",
     },
     {
       title: "Giáo viên",
-      dataIndex: "ma_giao_vien",
-      render: (id) => teacherName(id)
+      dataIndex: "ten_giao_vien",
+      render: (value) => value || "Chưa phân công",
     },
     {
       title: "Sĩ số",
       render: (_, record) =>
-        `${getStudentIds(record.ma_lop).length}/${record.si_so_toi_da}`
+        `${record.si_so_hien_tai}/${record.si_so_toi_da}`,
     },
     {
       title: "Ngày bắt đầu",
-      dataIndex: "ngay_bat_dau"
+      dataIndex: "ngay_bat_dau",
     },
     {
       title: "Trạng thái",
       dataIndex: "trang_thai",
       render: (status) => (
         <Tag color={statusColor[status]}>{status}</Tag>
-      )
+      ),
     },
     {
       title: "Thao tác",
@@ -342,22 +326,26 @@ export default function LopHoc() {
             icon={<EyeOutlined />}
             onClick={() => setViewingClass(record)}
           />
+
           <Button
             title="Xếp học viên"
             icon={<UserAddOutlined />}
+            disabled={record.trang_thai === "Đã kết thúc"}
             onClick={() => openEnrollment(record)}
           />
+
           <Button
             title="Chỉnh sửa"
             icon={<EditOutlined />}
             onClick={() => handleEdit(record)}
           />
+
           <Popconfirm
             title="Xóa lớp học?"
-            description="Xóa lớp khỏi dữ liệu mẫu?"
+            description="Chỉ xóa được lớp chưa có dữ liệu liên quan."
             okText="Xóa"
             cancelText="Hủy"
-            onConfirm={() => handleDelete(record.ma_lop)}
+            onConfirm={() => handleDelete(record)}
           >
             <Button
               danger
@@ -366,45 +354,61 @@ export default function LopHoc() {
             />
           </Popconfirm>
         </Space>
-      )
-    }
+      ),
+    },
   ];
 
   const stats = [
     {
       title: "Tổng lớp học",
-      value: classes.length,
+      value: counts.total,
       icon: <BookOutlined />,
-      color: "#1677ff"
+      color: "#1677ff",
     },
     {
       title: "Đang học",
-      value: classes.filter(
-        (c) => c.trang_thai === "Đang học"
-      ).length,
+      value: counts.active,
       icon: <TeamOutlined />,
-      color: "#52c41a"
+      color: "#52c41a",
     },
     {
       title: "Sắp mở",
-      value: classes.filter(
-        (c) => c.trang_thai === "Sắp mở"
-      ).length,
+      value: counts.upcoming,
       icon: <ClockCircleOutlined />,
-      color: "#faad14"
+      color: "#faad14",
     },
     {
       title: "Đã kết thúc",
-      value: classes.filter(
-        (c) => c.trang_thai === "Đã kết thúc"
-      ).length,
+      value: counts.finished,
       icon: <BookOutlined />,
-      color: "#8c8c8c"
-    }
+      color: "#8c8c8c",
+    },
   ];
+
+  const availableCourses = courses.filter(
+    (c) => c.trang_thai || (
+      editingClass &&
+      c.ma_khoa_hoc === editingClass.ma_khoa_hoc
+    )
+  );
+
+  const availableTeachers = teachers.filter(
+    (t) => t.trang_thai || (
+      editingClass &&
+      t.ma_giao_vien === editingClass.ma_giao_vien
+    )
+  );
+
+  const availableStudents = students.filter(
+    (s) =>
+      s.trang_thai ||
+      selectedStudents.includes(s.ma_hoc_vien)
+  );
 
   return (
     <div>
+      {contextHolder}
+
       <div style={{ marginBottom: 24 }}>
         <Typography.Title
           level={3}
@@ -417,6 +421,7 @@ export default function LopHoc() {
         </Typography.Text>
       </div>
 
+      {/* Thống kê */}
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         {stats.map((stat) => (
           <Col xs={24} sm={12} xl={6} key={stat.title}>
@@ -432,13 +437,14 @@ export default function LopHoc() {
         ))}
       </Row>
 
+      {/* Danh sách lớp */}
       <Card>
         <Space
           wrap
           style={{
             display: "flex",
             justifyContent: "space-between",
-            marginBottom: 20
+            marginBottom: 20,
           }}
         >
           <Space wrap>
@@ -447,44 +453,77 @@ export default function LopHoc() {
               prefix={<SearchOutlined />}
               style={{ width: 300 }}
               value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
+              onChange={(e) => {
+                setSearchText(e.target.value);
+                setPage(1);
+              }}
               allowClear
             />
+
             <Select
               value={filterStatus}
-              onChange={setFilterStatus}
+              onChange={(value) => {
+                setFilterStatus(value);
+                setPage(1);
+              }}
               style={{ width: 170 }}
               options={[
-                { value: "all", label: "Tất cả trạng thái" },
-                ...statusOptions
+                {
+                  value: "all",
+                  label: "Tất cả trạng thái",
+                },
+                ...statusOptions,
               ]}
             />
           </Space>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={handleAdd}
-          >
-            Thêm lớp học
-          </Button>
+
+          <Space>
+            <Button
+              icon={<ReloadOutlined />}
+              loading={loading}
+              onClick={() => {
+                fetchClasses();
+                fetchOptions();
+              }}
+            >
+              Làm mới
+            </Button>
+
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={handleAdd}
+            >
+              Thêm lớp học
+            </Button>
+          </Space>
         </Space>
 
         <Table
           columns={columns}
-          dataSource={filteredClasses}
+          dataSource={classes}
           rowKey="ma_lop"
+          loading={loading}
           pagination={{
-            pageSize: 7,
+            current: page,
+            pageSize,
+            total,
             showSizeChanger: false,
-            showTotal: (total) => `Tổng ${total} lớp học`
+            showTotal: (count) =>
+              `Tổng ${count} lớp học`,
+            onChange: setPage,
           }}
           scroll={{ x: 1350 }}
         />
       </Card>
 
-      {/* Form thêm / sửa lớp */}
+      {/* Thêm / sửa lớp */}
       <Modal
-        title={editingClass ? "Cập nhật lớp học" : "Thêm lớp học"}
+        title={
+          editingClass
+            ? "Cập nhật lớp học"
+            : "Thêm lớp học"
+        }
         open={modalOpen}
         onOk={handleSave}
         onCancel={() => {
@@ -494,6 +533,7 @@ export default function LopHoc() {
         }}
         okText="Lưu thông tin"
         cancelText="Hủy"
+        confirmLoading={saving}
         width={700}
       >
         <Form
@@ -507,31 +547,43 @@ export default function LopHoc() {
                 name="ten_lop"
                 label="Tên lớp"
                 rules={[
-                  { required: true, message: "Nhập tên lớp!" }
+                  {
+                    required: true,
+                    whitespace: true,
+                    message: "Nhập tên lớp!",
+                  },
                 ]}
               >
-                <Input placeholder="Ví dụ: IELTS 5.5 - A01" />
+                <Input
+                  placeholder="Ví dụ: IELTS Foundation A01"
+                  maxLength={100}
+                />
               </Form.Item>
             </Col>
+
             <Col xs={24} md={12}>
               <Form.Item
                 name="ma_khoa_hoc"
                 label="Khóa học"
                 rules={[
-                  { required: true, message: "Chọn khóa học!" }
+                  {
+                    required: true,
+                    message: "Chọn khóa học!",
+                  },
                 ]}
               >
                 <Select
                   showSearch
                   optionFilterProp="label"
                   placeholder="Chọn khóa học"
-                  options={courses.map((c) => ({
-                    value: c.id,
-                    label: c.name
+                  options={availableCourses.map((c) => ({
+                    value: c.ma_khoa_hoc,
+                    label: c.ten_khoa_hoc,
                   }))}
                 />
               </Form.Item>
             </Col>
+
             <Col xs={24} md={12}>
               <Form.Item
                 name="ma_giao_vien"
@@ -542,34 +594,43 @@ export default function LopHoc() {
                   allowClear
                   optionFilterProp="label"
                   placeholder="Chọn giáo viên"
-                  options={teachers.map((t) => ({
-                    value: t.id,
-                    label: t.name
+                  options={availableTeachers.map((t) => ({
+                    value: t.ma_giao_vien,
+                    label: t.ho_ten,
                   }))}
                 />
               </Form.Item>
             </Col>
+
             <Col xs={24} md={12}>
               <Form.Item
                 name="si_so_toi_da"
                 label="Sĩ số tối đa"
                 rules={[
-                  { required: true, message: "Nhập sĩ số!" }
+                  {
+                    required: true,
+                    message: "Nhập sĩ số!",
+                  },
                 ]}
               >
                 <InputNumber
                   min={1}
                   max={100}
+                  precision={0}
                   style={{ width: "100%" }}
                 />
               </Form.Item>
             </Col>
+
             <Col xs={24} md={12}>
               <Form.Item
                 name="ngay_bat_dau"
                 label="Ngày bắt đầu"
                 rules={[
-                  { required: true, message: "Chọn ngày bắt đầu!" }
+                  {
+                    required: true,
+                    message: "Chọn ngày bắt đầu!",
+                  },
                 ]}
               >
                 <DatePicker
@@ -578,12 +639,16 @@ export default function LopHoc() {
                 />
               </Form.Item>
             </Col>
+
             <Col xs={24} md={12}>
               <Form.Item
                 name="ngay_ket_thuc"
                 label="Ngày kết thúc"
                 rules={[
-                  { required: true, message: "Chọn ngày kết thúc!" }
+                  {
+                    required: true,
+                    message: "Chọn ngày kết thúc!",
+                  },
                 ]}
               >
                 <DatePicker
@@ -592,12 +657,16 @@ export default function LopHoc() {
                 />
               </Form.Item>
             </Col>
+
             <Col span={24}>
               <Form.Item
                 name="trang_thai"
                 label="Trạng thái"
                 rules={[
-                  { required: true, message: "Chọn trạng thái!" }
+                  {
+                    required: true,
+                    message: "Chọn trạng thái!",
+                  },
                 ]}
               >
                 <Select options={statusOptions} />
@@ -607,7 +676,7 @@ export default function LopHoc() {
         </Form>
       </Modal>
 
-      {/* Chi tiết lớp học */}
+      {/* Chi tiết lớp */}
       <Modal
         title="Chi tiết lớp học"
         open={!!viewingClass}
@@ -629,37 +698,40 @@ export default function LopHoc() {
               {
                 key: "id",
                 label: "Mã lớp",
-                children: viewingClass.ma_lop
+                children: viewingClass.ma_lop,
               },
               {
                 key: "name",
                 label: "Tên lớp",
-                children: viewingClass.ten_lop
+                children: viewingClass.ten_lop,
               },
               {
                 key: "course",
                 label: "Khóa học",
-                children: courseName(viewingClass.ma_khoa_hoc)
+                children: viewingClass.ten_khoa_hoc,
               },
               {
                 key: "teacher",
                 label: "Giáo viên",
-                children: teacherName(viewingClass.ma_giao_vien)
+                children:
+                  viewingClass.ten_giao_vien ||
+                  "Chưa phân công",
               },
               {
                 key: "capacity",
                 label: "Sĩ số",
-                children: `${getStudentIds(viewingClass.ma_lop).length}/${viewingClass.si_so_toi_da}`
+                children:
+                  `${viewingClass.si_so_hien_tai}/${viewingClass.si_so_toi_da}`,
               },
               {
                 key: "start",
                 label: "Ngày bắt đầu",
-                children: viewingClass.ngay_bat_dau
+                children: viewingClass.ngay_bat_dau,
               },
               {
                 key: "end",
                 label: "Ngày kết thúc",
-                children: viewingClass.ngay_ket_thuc
+                children: viewingClass.ngay_ket_thuc,
               },
               {
                 key: "status",
@@ -668,14 +740,14 @@ export default function LopHoc() {
                   <Tag color={statusColor[viewingClass.trang_thai]}>
                     {viewingClass.trang_thai}
                   </Tag>
-                )
-              }
+                ),
+              },
             ]}
           />
         )}
       </Modal>
 
-      {/* Xếp học viên vào lớp */}
+      {/* Xếp học viên */}
       <Modal
         title={
           enrollingClass
@@ -687,6 +759,7 @@ export default function LopHoc() {
         onCancel={() => setEnrollingClass(null)}
         okText="Lưu danh sách"
         cancelText="Hủy"
+        confirmLoading={enrollmentLoading}
         width={650}
       >
         {enrollingClass && (
@@ -708,9 +781,10 @@ export default function LopHoc() {
               value={selectedStudents}
               onChange={setSelectedStudents}
               maxTagCount="responsive"
-              options={students.map((s) => ({
-                value: s.id,
-                label: `${s.id} - ${s.name}`
+              options={availableStudents.map((s) => ({
+                value: s.ma_hoc_vien,
+                label: `${s.ma_hoc_vien} - ${s.ho_ten}`,
+                disabled: !s.trang_thai,
               }))}
             />
 
@@ -729,20 +803,34 @@ export default function LopHoc() {
                 bordered
                 style={{
                   maxHeight: 240,
-                  overflowY: "auto"
+                  overflowY: "auto",
                 }}
                 dataSource={selectedStudents}
                 renderItem={(id) => {
                   const student = students.find(
-                    (s) => s.id === id
+                    (s) => s.ma_hoc_vien === id
                   );
                   return (
                     <List.Item>
-                      {student?.name || `Học viên ${id}`}
+                      {student
+                        ? `${id} - ${student.ho_ten}`
+                        : `Học viên ${id}`}
                     </List.Item>
                   );
                 }}
               />
+            )}
+
+            {classStudents.some(
+              (s) => s.trang_thai !== "Đang học"
+            ) && (
+              <Typography.Text
+                type="secondary"
+                style={{ display: "block", marginTop: 12 }}
+              >
+                Các học viên đã hoàn thành hoặc rời lớp
+                vẫn được lưu trong lịch sử xếp lớp.
+              </Typography.Text>
             )}
           </div>
         )}
