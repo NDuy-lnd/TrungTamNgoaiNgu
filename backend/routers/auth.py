@@ -22,14 +22,16 @@ router = APIRouter(
 
 
 def build_user_response(account, db):
-    name = None
+    ho_ten = None
     user_id = None
+
     if account.vai_tro == "Giáo viên":
         teacher = db.query(GiaoVien).filter(
             GiaoVien.ma_tai_khoan == account.ma_tai_khoan
         ).first()
 
         ho_ten = teacher.ho_ten if teacher else "Giáo viên"
+        user_id = teacher.ma_giao_vien if teacher else None
 
     elif account.vai_tro == "Học viên":
         student = db.query(HocVien).filter(
@@ -37,15 +39,16 @@ def build_user_response(account, db):
         ).first()
 
         ho_ten = student.ho_ten if student else "Học viên"
+        user_id = student.ma_hoc_vien if student else None
 
     else:
-        ho_ten = "Lê Ngọc Duy"
+        ho_ten = "Quản trị viên"
 
     return UserResponse(
         ma_tai_khoan=account.ma_tai_khoan,
         ten_dang_nhap=account.ten_dang_nhap,
         vai_tro=account.vai_tro,
-        ho_ten=name,
+        ho_ten=ho_ten,
         ma_nguoi_dung=user_id
     )
 
@@ -124,7 +127,6 @@ def admin_reset_password(
     }
 
 
-
 @router.put("/change-password")
 def change_password(
     data: ChangePasswordRequest,
@@ -155,5 +157,3 @@ def change_password(
     return {
         "message": "Đổi mật khẩu thành công"
     }
-
-

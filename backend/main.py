@@ -96,3 +96,42 @@ app.include_router(lich_hoc_router)
 
 from routers.thong_ke import router as thong_ke_router
 app.include_router(thong_ke_router)
+
+from routers.teacher_classes import router as teacher_classes_router
+app.include_router(teacher_classes_router)
+
+from routers.teacher_schedule import router as teacher_schedule_router
+app.include_router(teacher_schedule_router)
+
+from routers.teacher_attendance import router as teacher_attendance_router
+app.include_router(teacher_attendance_router)
+
+from routers.teacher_grades import router as teacher_grades_router
+app.include_router(teacher_grades_router)
+
+from routers.teacher_documents import router as teacher_documents_router
+app.include_router(teacher_documents_router)
+
+from routers.admin_dashboard import router as admin_dashboard_router
+app.include_router(admin_dashboard_router)
+
+from routers.teacher_dashboard import router as teacher_dashboard_router
+app.include_router(teacher_dashboard_router)
+
+from routers.student_dashboard import router as student_dashboard_router
+app.include_router(student_dashboard_router)
+
+from routers.student_classes import router as student_classes_router
+app.include_router(student_classes_router)
+
+from routers.student_schedule import router as student_schedule_router
+app.include_router(student_schedule_router)
+
+from routers.student_attendance import router as student_attendance_router
+app.include_router(student_attendance_router)
+
+from routers.student_grades import router as student_grades_router
+app.include_router(student_grades_router)
+
+from routers.student_documents import router as student_documents_router
+app.include_router(student_documents_router)

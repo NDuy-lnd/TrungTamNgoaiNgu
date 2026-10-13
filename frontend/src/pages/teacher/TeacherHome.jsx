@@ -1,125 +1,217 @@
 
 import {
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
+
+import {
   Card,
   Row,
   Col,
   Statistic,
   Typography,
   Table,
-  Tag
+  Tag,
+  Button,
+  message,
 } from "antd";
 
 import {
   TeamOutlined,
   UserOutlined,
   CalendarOutlined,
-  CheckCircleOutlined
+  CheckCircleOutlined,
+  ReloadOutlined,
 } from "@ant-design/icons";
 
 import { useAuth } from "../../contexts/AuthContext";
 
-const classes = [
-  {
-    id: 1,
-    name: "Giao tiếp A01",
-    course: "Tiếng Anh giao tiếp cơ bản",
-    students: 12,
-    schedule: "Thứ 2, Thứ 4 - 18:00",
-    status: "Đang học"
-  },
-  {
-    id: 2,
-    name: "IELTS 5.5 - A01",
-    course: "Luyện thi IELTS 5.5",
-    students: 15,
-    schedule: "Thứ 3, Thứ 5 - 18:00",
-    status: "Đang học"
+import teacherDashboardService from "../../services/teacherDashboardService";
+
+const initialStats = {
+  total_classes: 0,
+  total_students: 0,
+  weekly_sessions: 0,
+  active_classes: 0,
+};
+
+function getStatusColor(status) {
+  switch (status) {
+    case "Đang học":
+      return "green";
+    case "Sắp mở":
+      return "orange";
+    case "Đã kết thúc":
+      return "default";
+    default:
+      return "blue";
   }
-];
+}
+
+function getErrorMessage(error) {
+  const detail = error?.response?.data?.detail;
+
+  if (typeof detail === "string") {
+    return detail;
+  }
+
+  if (error?.response?.status === 401) {
+    return "Phiên đăng nhập đã hết hạn.";
+  }
+
+  if (error?.response?.status === 403) {
+    return "Bạn không có quyền truy cập.";
+  }
+
+  return "Không thể tải dữ liệu Tổng quan.";
+}
 
 const columns = [
   {
     title: "Tên lớp",
     dataIndex: "name",
-    render: (name) => <strong>{name}</strong>
+    render: (name) => <strong>{name}</strong>,
   },
   {
     title: "Khóa học",
-    dataIndex: "course"
+    dataIndex: "course",
   },
   {
     title: "Sĩ số",
-    dataIndex: "students"
+    dataIndex: "students",
   },
   {
     title: "Lịch học",
-    dataIndex: "schedule"
+    dataIndex: "schedule",
   },
   {
     title: "Trạng thái",
     dataIndex: "status",
     render: (status) => (
-      <Tag color="green">{status}</Tag>
-    )
-  }
+      <Tag color={getStatusColor(status)}>
+        {status}
+      </Tag>
+    ),
+  },
 ];
 
 export default function TeacherHome() {
   const { user } = useAuth();
 
+  const [stats, setStats] = useState(initialStats);
+  const [classes, setClasses] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const [messageApi, contextHolder] = message.useMessage();
+
+  const fetchDashboard = useCallback(async () => {
+    setLoading(true);
+
+    try {
+      const data =
+        await teacherDashboardService.getOverview();
+
+      setStats(data.stats || initialStats);
+      setClasses(data.classes || []);
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+      setStats(initialStats);
+      setClasses([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [messageApi]);
+
+  useEffect(() => {
+    fetchDashboard();
+  }, [fetchDashboard]);
+
   return (
     <div>
-      <div style={{ marginBottom: 24 }}>
-        <Typography.Title level={3}>
-          Tổng quan Giáo viên
-        </Typography.Title>
+      {contextHolder}
 
-        <Typography.Text type="secondary">
-          Xin chào, {user?.name}! Chào mừng quay lại hệ thống.
-        </Typography.Text>
+      <div
+        style={{
+          marginBottom: 24,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: 16,
+        }}
+      >
+        <div>
+          <Typography.Title level={3}>
+            Tổng quan Giáo viên
+          </Typography.Title>
+
+          <Typography.Text type="secondary">
+            Xin chào, {user?.name || "Giáo viên"}!
+            {" "}Chào mừng quay lại hệ thống.
+          </Typography.Text>
+        </div>
+
+        <Button
+          icon={<ReloadOutlined />}
+          loading={loading}
+          onClick={fetchDashboard}
+        >
+          Làm mới
+        </Button>
       </div>
 
-      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+      <Row
+        gutter={[16, 16]}
+        style={{ marginBottom: 24 }}
+      >
         <Col xs={24} sm={12} lg={6}>
-          <Card>
+          <Card loading={loading}>
             <Statistic
               title="Lớp phụ trách"
-              value={2}
+              value={stats.total_classes}
               prefix={<TeamOutlined />}
-              valueStyle={{ color: "#1677FF" }}
+              valueStyle={{
+                color: "#1677FF",
+              }}
             />
           </Card>
         </Col>
 
         <Col xs={24} sm={12} lg={6}>
-          <Card>
+          <Card loading={loading}>
             <Statistic
               title="Tổng học viên"
-              value={27}
+              value={stats.total_students}
               prefix={<UserOutlined />}
-              valueStyle={{ color: "#52C41A" }}
+              valueStyle={{
+                color: "#52C41A",
+              }}
             />
           </Card>
         </Col>
 
         <Col xs={24} sm={12} lg={6}>
-          <Card>
+          <Card loading={loading}>
             <Statistic
               title="Buổi dạy mỗi tuần"
-              value={4}
+              value={stats.weekly_sessions}
               prefix={<CalendarOutlined />}
-              valueStyle={{ color: "#722ED1" }}
+              valueStyle={{
+                color: "#722ED1",
+              }}
             />
           </Card>
         </Col>
 
         <Col xs={24} sm={12} lg={6}>
-          <Card>
+          <Card loading={loading}>
             <Statistic
               title="Lớp đang hoạt động"
-              value={2}
+              value={stats.active_classes}
               prefix={<CheckCircleOutlined />}
-              valueStyle={{ color: "#FA8C16" }}
+              valueStyle={{
+                color: "#FA8C16",
+              }}
             />
           </Card>
         </Col>
@@ -130,8 +222,16 @@ export default function TeacherHome() {
           columns={columns}
           dataSource={classes}
           rowKey="id"
-          pagination={false}
+          loading={loading}
+          pagination={{
+            pageSize: 5,
+            showSizeChanger: false,
+          }}
           scroll={{ x: 700 }}
+          locale={{
+            emptyText:
+              "Bạn chưa được phân công lớp học nào",
+          }}
         />
       </Card>
     </div>

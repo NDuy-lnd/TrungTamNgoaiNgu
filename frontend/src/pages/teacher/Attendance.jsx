@@ -1,78 +1,56 @@
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Card,
-  Row,
-  Col,
-  Statistic,
-  Typography,
-  Select,
-  DatePicker,
-  Table,
-  Radio,
-  Input,
-  Button,
-  Space,
-  Tag,
-  Alert,
-  message
+  Card, Row, Col, Statistic, Typography, Select,
+  DatePicker, Table, Radio, Input, Button,
+  Space, Tag, Alert, message, Modal, Empty
 } from "antd";
 
 import {
-  TeamOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  SaveOutlined,
+  TeamOutlined, CheckCircleOutlined,
+  CloseCircleOutlined, SaveOutlined,
   ReloadOutlined
 } from "@ant-design/icons";
 
 import dayjs from "dayjs";
+import teacherAttendanceService from "../../services/teacherAttendanceService";
 
-const classes = [
-  {
-    ma_lop: 1,
-    ten_lop: "Giao tiếp A01",
-    students: [
-      { ma_xep_lop: 101, ma_hoc_vien: 1, ho_ten: "Nguyễn Văn An" },
-      { ma_xep_lop: 102, ma_hoc_vien: 2, ho_ten: "Trần Thị Bình" },
-      { ma_xep_lop: 103, ma_hoc_vien: 3, ho_ten: "Lê Minh Đức" },
-      { ma_xep_lop: 104, ma_hoc_vien: 4, ho_ten: "Phạm Thị Hoa" }
-    ]
-  },
-  {
-    ma_lop: 2,
-    ten_lop: "IELTS 5.5 - A01",
-    students: [
-      { ma_xep_lop: 201, ma_hoc_vien: 5, ho_ten: "Hoàng Gia Huy" },
-      { ma_xep_lop: 202, ma_hoc_vien: 6, ho_ten: "Đỗ Thu Trang" },
-      { ma_xep_lop: 203, ma_hoc_vien: 7, ho_ten: "Bùi Minh Khang" }
-    ]
+function getErrorMessage(error) {
+  const detail = error?.response?.data?.detail;
+
+  if (typeof detail === "string") return detail;
+
+  if (Array.isArray(detail)) {
+    return detail.map((item) => item.msg).join("; ");
   }
-];
 
-// Dữ liệu lưu tạm trên trình duyệt
-const STORAGE_KEY = "teacher_attendance_demo";
-
-function loadSavedAttendance() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-  } catch {
-    return {};
+  if (error?.response?.status === 401) {
+    return "Phiên đăng nhập đã hết hạn.";
   }
+
+  if (error?.response?.status === 403) {
+    return "Bạn không có quyền điểm danh lớp này.";
+  }
+
+  return "Không thể kết nối đến máy chủ.";
 }
 
 export default function Attendance() {
   const [messageApi, contextHolder] = message.useMessage();
 
-  const [selectedClassId, setSelectedClassId] = useState(1);
+  const [classes, setClasses] = useState([]);
+  const [selectedClassId, setSelectedClassId] = useState(null);
   const [selectedDate, setSelectedDate] = useState(dayjs());
 
-  const [savedAttendance, setSavedAttendance] =
-    useState(loadSavedAttendance);
-
+  const [students, setStudents] = useState([]);
+  const [savedRecords, setSavedRecords] = useState({});
   const [draftAttendance, setDraftAttendance] = useState({});
 
   const [dirty, setDirty] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const selectedClass = classes.find(
     (item) => item.ma_lop === selectedClassId
@@ -80,16 +58,81 @@ export default function Attendance() {
 
   const dateString = selectedDate.format("YYYY-MM-DD");
 
-  const recordKey = `${selectedClassId}_${dateString}`;
+  // Lấy danh sách lớp của giáo viên
+  const fetchClasses = useCallback(async () => {
+    try {
+      const data = await teacherAttendanceService.getClasses();
+      setClasses(data || []);
 
-  const savedRecords = savedAttendance[recordKey] || {};
+      setSelectedClassId((previous) => {
+        if (data.some((item) => item.ma_lop === previous)) {
+          return previous;
+        }
+        return data[0]?.ma_lop ?? null;
+      });
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    }
+  }, [messageApi]);
 
-  // Nếu đã chỉnh sửa nhưng chưa lưu, ưu tiên dữ liệu đang nhập
+  useEffect(() => {
+    fetchClasses();
+  }, [fetchClasses]);
+
+  // Lấy dữ liệu điểm danh theo lớp và ngày
+  const fetchAttendance = useCallback(async () => {
+    if (!selectedClassId) {
+      setStudents([]);
+      setSavedRecords({});
+      setDraftAttendance({});
+      setIsSaved(false);
+      setDirty(false);
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const data = await teacherAttendanceService.getAttendance(
+        selectedClassId,
+        dateString
+      );
+
+      const records = {};
+
+      (data.items || []).forEach((student) => {
+        records[student.ma_xep_lop] = {
+          trang_thai: student.trang_thai,
+          ghi_chu: student.ghi_chu || "",
+        };
+      });
+
+      setStudents(data.items || []);
+      setSavedRecords(records);
+      setDraftAttendance({});
+      setIsSaved(data.is_saved || false);
+      setDirty(false);
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+      setStudents([]);
+      setSavedRecords({});
+      setDraftAttendance({});
+      setIsSaved(false);
+      setDirty(false);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedClassId, dateString, messageApi]);
+
+  useEffect(() => {
+    fetchAttendance();
+  }, [fetchAttendance]);
+
+  // Dữ liệu hiển thị: bản nháp nếu có chỉnh sửa,
+  // nếu không thì dùng dữ liệu đã lấy từ MySQL.
   const currentRecords = dirty
     ? draftAttendance
     : savedRecords;
-
-  const students = selectedClass?.students || [];
 
   const attendanceRows = useMemo(() => {
     return students.map((student) => ({
@@ -97,7 +140,7 @@ export default function Attendance() {
       trang_thai:
         currentRecords[student.ma_xep_lop]?.trang_thai || null,
       ghi_chu:
-        currentRecords[student.ma_xep_lop]?.ghi_chu || ""
+        currentRecords[student.ma_xep_lop]?.ghi_chu || "",
     }));
   }, [students, currentRecords]);
 
@@ -112,43 +155,61 @@ export default function Attendance() {
   const unmarkedCount =
     attendanceRows.length - presentCount - absentCount;
 
-  const isSaved = Boolean(savedAttendance[recordKey]);
-
+  // Thay đổi trạng thái hoặc ghi chú
   const updateAttendance = (studentId, field, value) => {
     const updated = {
       ...currentRecords,
       [studentId]: {
         ...(currentRecords[studentId] || {}),
-        [field]: value
-      }
+        [field]: value,
+      },
     };
 
     setDraftAttendance(updated);
     setDirty(true);
   };
 
+  // Xác nhận trước khi bỏ thay đổi chưa lưu
+  const confirmDiscard = (callback) => {
+    if (!dirty) {
+      callback();
+      return;
+    }
+
+    Modal.confirm({
+      title: "Bạn có thay đổi chưa lưu",
+      content: "Chuyển lớp hoặc ngày sẽ hủy các thay đổi này.",
+      okText: "Tiếp tục",
+      cancelText: "Ở lại",
+      onOk: callback,
+    });
+  };
+
   const handleClassChange = (value) => {
-    setSelectedClassId(value);
-    setDraftAttendance({});
-    setDirty(false);
+    confirmDiscard(() => {
+      setSelectedClassId(value);
+    });
   };
 
   const handleDateChange = (date) => {
     if (!date) return;
 
-    setSelectedDate(date);
-    setDraftAttendance({});
-    setDirty(false);
+    confirmDiscard(() => {
+      setSelectedDate(date);
+    });
   };
 
+  // Đánh dấu toàn bộ học viên có mặt
   const markAllPresent = () => {
+    if (!students.length) return;
+
     const updated = {};
 
     students.forEach((student) => {
       updated[student.ma_xep_lop] = {
         trang_thai: "Có mặt",
         ghi_chu:
-          currentRecords[student.ma_xep_lop]?.ghi_chu || ""
+          currentRecords[student.ma_xep_lop]?.ghi_chu || "",
       };
     });
 
@@ -156,13 +217,17 @@ export default function Attendance() {
     setDirty(true);
   };
 
+  // Hoàn tác, quay lại dữ liệu đã lưu trên MySQL
   const resetDraft = () => {
     setDraftAttendance({});
     setDirty(false);
     messageApi.info("Đã khôi phục dữ liệu đã lưu");
   };
 
-  const handleSave = () => {
+  // Gửi điểm danh lên Backend
+  const handleSave = async () => {
+    if (!selectedClassId || !students.length) return;
+
     if (unmarkedCount > 0) {
       messageApi.warning(
         `Còn ${unmarkedCount} học viên chưa được điểm danh`
@@ -170,24 +235,27 @@ export default function Attendance() {
       return;
     }
 
-    const updated = {
-      ...savedAttendance,
-      [recordKey]: currentRecords
-    };
+    const records = attendanceRows.map((item) => ({
+      ma_xep_lop: item.ma_xep_lop,
+      trang_thai: item.trang_thai,
+      ghi_chu: item.ghi_chu.trim() || null,
+    }));
+
+    setSaving(true);
 
     try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(updated)
+      await teacherAttendanceService.saveAttendance(
+        selectedClassId,
+        dateString,
+        records
       );
 
-      setSavedAttendance(updated);
-      setDraftAttendance({});
-      setDirty(false);
-
       messageApi.success("Lưu điểm danh thành công!");
-    } catch {
-      messageApi.error("Không thể lưu dữ liệu trên trình duyệt");
+      await fetchAttendance();
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -195,17 +263,17 @@ export default function Attendance() {
     {
       title: "STT",
       width: 70,
-      render: (_, __, index) => index + 1
+      render: (_, __, index) => index + 1,
     },
     {
       title: "Mã học viên",
       dataIndex: "ma_hoc_vien",
-      width: 130
+      width: 130,
     },
     {
       title: "Họ và tên",
       dataIndex: "ho_ten",
-      render: (name) => <strong>{name}</strong>
+      render: (name) => <strong>{name}</strong>,
     },
     {
       title: "Điểm danh",
@@ -224,13 +292,14 @@ export default function Attendance() {
           <Radio value="Có mặt">Có mặt</Radio>
           <Radio value="Vắng mặt">Vắng mặt</Radio>
         </Radio.Group>
-      )
+      ),
     },
     {
       title: "Ghi chú",
       render: (_, record) => (
         <Input
           placeholder="Nhập ghi chú..."
+          maxLength={255}
           value={record.ghi_chu}
           onChange={(event) =>
             updateAttendance(
@@ -240,14 +309,15 @@ export default function Attendance() {
             )
           }
         />
-      )
-    }
+      ),
+    },
   ];
 
   return (
     <div>
       {contextHolder}
 
+      {/* Tiêu đề */}
       <div style={{ marginBottom: 24 }}>
         <Typography.Title level={3}>
           Điểm danh học viên
@@ -258,6 +328,7 @@ export default function Attendance() {
         </Typography.Text>
       </div>
 
+      {/* Chọn lớp, ngày, trạng thái lưu */}
       <Card style={{ marginBottom: 20 }}>
         <Space wrap size="large">
           <div>
@@ -270,9 +341,10 @@ export default function Attendance() {
                 value={selectedClassId}
                 onChange={handleClassChange}
                 style={{ width: 250 }}
+                placeholder="Chọn lớp học"
                 options={classes.map((item) => ({
                   value: item.ma_lop,
-                  label: item.ten_lop
+                  label: item.ten_lop,
                 }))}
               />
             </div>
@@ -289,6 +361,9 @@ export default function Attendance() {
                 onChange={handleDateChange}
                 format="DD/MM/YYYY"
                 allowClear={false}
+                disabledDate={(date) =>
+                  date && date.isAfter(dayjs(), "day")
+                }
               />
             </div>
           </div>
@@ -300,9 +375,13 @@ export default function Attendance() {
 
             <div style={{ marginTop: 8 }}>
               {dirty ? (
-                <Tag color="orange">Chưa lưu thay đổi</Tag>
+                <Tag color="orange">
+                  Chưa lưu thay đổi
+                </Tag>
               ) : isSaved ? (
-                <Tag color="green">Đã lưu</Tag>
+                <Tag color="green">
+                  Đã lưu
+                </Tag>
               ) : (
                 <Tag>Chưa điểm danh</Tag>
               )}
@@ -311,9 +390,13 @@ export default function Attendance() {
         </Space>
       </Card>
 
-      <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
+      {/* Thống kê */}
+      <Row
+        gutter={[16, 16]}
+        style={{ marginBottom: 20 }}
+      >
         <Col xs={12} md={6}>
-          <Card>
+          <Card loading={loading}>
             <Statistic
               title="Tổng học viên"
               value={students.length}
@@ -323,7 +406,7 @@ export default function Attendance() {
         </Col>
 
         <Col xs={12} md={6}>
-          <Card>
+          <Card loading={loading}>
             <Statistic
               title="Có mặt"
               value={presentCount}
@@ -334,7 +417,7 @@ export default function Attendance() {
         </Col>
 
         <Col xs={12} md={6}>
-          <Card>
+          <Card loading={loading}>
             <Statistic
               title="Vắng mặt"
               value={absentCount}
@@ -345,7 +428,7 @@ export default function Attendance() {
         </Col>
 
         <Col xs={12} md={6}>
-          <Card>
+          <Card loading={loading}>
             <Statistic
               title="Chưa điểm danh"
               value={unmarkedCount}
@@ -364,11 +447,19 @@ export default function Attendance() {
         />
       )}
 
+      {/* Danh sách học viên */}
       <Card
-        title={`Danh sách học viên - ${selectedClass?.ten_lop}`}
+        title={
+          `Danh sách học viên - ${
+            selectedClass?.ten_lop || "Chưa chọn lớp"
+          }`
+        }
         extra={
           <Space wrap>
-            <Button onClick={markAllPresent}>
+            <Button
+              onClick={markAllPresent}
+              disabled={!students.length || loading}
+            >
               Tất cả có mặt
             </Button>
 
@@ -384,20 +475,30 @@ export default function Attendance() {
               type="primary"
               icon={<SaveOutlined />}
               onClick={handleSave}
-              disabled={!students.length}
+              loading={saving}
+              disabled={
+                !students.length ||
+                loading ||
+                !dirty
+              }
             >
               Lưu điểm danh
             </Button>
           </Space>
         }
       >
-        <Table
-          columns={columns}
-          dataSource={attendanceRows}
-          rowKey="ma_xep_lop"
-          pagination={false}
-          scroll={{ x: 850 }}
-        />
+        {classes.length === 0 && !loading ? (
+          <Empty description="Chưa có lớp được phân công" />
+        ) : (
+          <Table
+            columns={columns}
+            dataSource={attendanceRows}
+            rowKey="ma_xep_lop"
+            loading={loading}
+            pagination={false}
+            scroll={{ x: 850 }}
+          />
+        )}
 
         <div style={{ marginTop: 16 }}>
           <Typography.Text type="secondary">

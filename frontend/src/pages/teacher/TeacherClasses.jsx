@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   Card,
@@ -7,423 +7,383 @@ import {
   Col,
   Statistic,
   Typography,
+  Select,
+  Segmented,
   Table,
   Tag,
-  Input,
-  Select,
-  Button,
+  Empty,
   Space,
-  Modal,
-  Descriptions,
-  Tabs,
-  Empty
+  Button,
+  message,
 } from "antd";
 
 import {
-  TeamOutlined,
-  UserOutlined,
-  CheckCircleOutlined,
-  EyeOutlined,
-  SearchOutlined,
-  CalendarOutlined
+  CalendarOutlined,
+  BookOutlined,
+  ClockCircleOutlined,
+  EnvironmentOutlined,
+  ReloadOutlined,
 } from "@ant-design/icons";
 
-// Dữ liệu mẫu cho giáo viên đang đăng nhập
-const initialClasses = [
-  {
-    ma_lop: 1,
-    ten_lop: "Giao tiếp A01",
-    khoa_hoc: "Tiếng Anh giao tiếp cơ bản",
-    ngay_bat_dau: "2026-09-01",
-    ngay_ket_thuc: "2026-12-01",
-    si_so_toi_da: 20,
-    trang_thai: "Đang học",
-    lich_hoc: [
-      {
-        thu: "Thứ 2",
-        gio: "18:00 - 20:00",
-        phong: "P101"
-      },
-      {
-        thu: "Thứ 4",
-        gio: "18:00 - 20:00",
-        phong: "P101"
-      }
-    ],
-    hoc_vien: [
-      {
-        ma_hoc_vien: 1,
-        ho_ten: "Nguyễn Văn An",
-        email: "an@example.com",
-        so_dien_thoai: "0912345678"
-      },
-      {
-        ma_hoc_vien: 2,
-        ho_ten: "Trần Thị Bình",
-        email: "binh@example.com",
-        so_dien_thoai: "0912345679"
-      },
-      {
-        ma_hoc_vien: 3,
-        ho_ten: "Lê Minh Đức",
-        email: "duc@example.com",
-        so_dien_thoai: "0912345680"
-      },
-      {
-        ma_hoc_vien: 4,
-        ho_ten: "Phạm Thị Hoa",
-        email: "hoa@example.com",
-        so_dien_thoai: "0912345681"
-      }
-    ]
-  },
-  {
-    ma_lop: 2,
-    ten_lop: "IELTS 5.5 - A01",
-    khoa_hoc: "Luyện thi IELTS 5.5",
-    ngay_bat_dau: "2026-09-15",
-    ngay_ket_thuc: "2027-01-15",
-    si_so_toi_da: 20,
-    trang_thai: "Đang học",
-    lich_hoc: [
-      {
-        thu: "Thứ 3",
-        gio: "18:00 - 20:00",
-        phong: "P102"
-      },
-      {
-        thu: "Thứ 5",
-        gio: "18:00 - 20:00",
-        phong: "P102"
-      }
-    ],
-    hoc_vien: [
-      {
-        ma_hoc_vien: 5,
-        ho_ten: "Hoàng Gia Huy",
-        email: "huy@example.com",
-        so_dien_thoai: "0912345682"
-      },
-      {
-        ma_hoc_vien: 6,
-        ho_ten: "Đỗ Thu Trang",
-        email: "trang@example.com",
-        so_dien_thoai: "0912345683"
-      },
-      {
-        ma_hoc_vien: 7,
-        ho_ten: "Bùi Minh Khang",
-        email: "khang@example.com",
-        so_dien_thoai: "0912345684"
-      }
-    ]
-  }
+import teacherScheduleService from "../../services/teacherScheduleService";
+
+const weekdays = [
+  "Thứ 2",
+  "Thứ 3",
+  "Thứ 4",
+  "Thứ 5",
+  "Thứ 6",
+  "Thứ 7",
+  "Chủ nhật",
 ];
 
-const statusColors = {
-  "Đang học": "green",
-  "Sắp mở": "orange",
-  "Đã kết thúc": "default"
-};
+const colors = [
+  "blue",
+  "purple",
+  "green",
+  "orange",
+  "cyan",
+  "magenta",
+  "geekblue",
+];
 
-export default function TeacherClasses() {
-  const [classes] = useState(initialClasses);
-  const [searchText, setSearchText] = useState("");
-  const [filterStatus, setFilterStatus] = useState("all");
-  const [selectedClass, setSelectedClass] = useState(null);
-  const [detailOpen, setDetailOpen] = useState(false);
+function getDurationHours(start, end) {
+  if (!start || !end) return 0;
 
-  const filteredClasses = classes.filter((item) => {
-    const keyword = searchText.trim().toLowerCase();
+  const [startHour, startMinute] = start.split(":").map(Number);
+  const [endHour, endMinute] = end.split(":").map(Number);
 
-    const matchesSearch =
-      item.ten_lop.toLowerCase().includes(keyword) ||
-      item.khoa_hoc.toLowerCase().includes(keyword);
+  return (
+    (endHour * 60 + endMinute - startHour * 60 - startMinute) / 60
+  );
+}
 
-    const matchesStatus =
-      filterStatus === "all" ||
-      item.trang_thai === filterStatus;
+function getErrorMessage(error) {
+  const detail = error?.response?.data?.detail;
 
-    return matchesSearch && matchesStatus;
-  });
+  if (typeof detail === "string") {
+    return detail;
+  }
 
-  const openDetail = (record) => {
-    setSelectedClass(record);
-    setDetailOpen(true);
-  };
+  if (Array.isArray(detail)) {
+    return detail.map((item) => item.msg).join("; ");
+  }
 
-  const studentColumns = [
-    {
-      title: "Mã học viên",
-      dataIndex: "ma_hoc_vien",
-      width: 120
-    },
-    {
-      title: "Họ và tên",
-      dataIndex: "ho_ten",
-      render: (name) => <strong>{name}</strong>
-    },
-    {
-      title: "Email",
-      dataIndex: "email"
-    },
-    {
-      title: "Số điện thoại",
-      dataIndex: "so_dien_thoai"
+  if (error?.response?.status === 401) {
+    return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
+  }
+
+  if (error?.response?.status === 403) {
+    return "Bạn không có quyền xem lịch giảng dạy.";
+  }
+
+  return "Không thể tải lịch giảng dạy từ máy chủ.";
+}
+
+export default function TeacherSchedule() {
+  const [schedules, setSchedules] = useState([]);
+  const [classOptions, setClassOptions] = useState([]);
+
+  const [selectedClass, setSelectedClass] = useState("all");
+  const [viewMode, setViewMode] = useState("week");
+
+  const [loading, setLoading] = useState(false);
+
+  const [messageApi, contextHolder] = message.useMessage();
+
+  // 1. Lấy lịch của giáo viên đang đăng nhập
+  const fetchSchedules = useCallback(async () => {
+    setLoading(true);
+
+    try {
+      const data = await teacherScheduleService.getAll();
+
+      setSchedules(data.items || []);
+      setClassOptions(data.classes || []);
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    } finally {
+      setLoading(false);
     }
-  ];
+  }, [messageApi]);
 
+  useEffect(() => {
+    fetchSchedules();
+  }, [fetchSchedules]);
+
+  // 2. Tạo màu riêng cho từng lớp
+  const classColors = useMemo(() => {
+    const result = {};
+
+    classOptions.forEach((item, index) => {
+      result[item.value] = colors[index % colors.length];
+    });
+
+    return result;
+  }, [classOptions]);
+
+  // 3. Lọc lịch theo lớp
+  const filteredSchedules = useMemo(() => {
+    return schedules.filter(
+      (item) =>
+        selectedClass === "all" ||
+        item.ma_lop === selectedClass
+    );
+  }, [schedules, selectedClass]);
+
+  // 4. Thống kê theo bộ lọc
+  const totalHours = useMemo(() => {
+    return filteredSchedules.reduce(
+      (sum, item) =>
+        sum +
+        getDurationHours(
+          item.gio_bat_dau,
+          item.gio_ket_thuc
+        ),
+      0
+    );
+  }, [filteredSchedules]);
+
+  const totalClasses = useMemo(() => {
+    return new Set(
+      filteredSchedules.map((item) => item.ma_lop)
+    ).size;
+  }, [filteredSchedules]);
+
+  // 5. Cấu hình bảng danh sách
   const columns = [
     {
-      title: "Mã lớp",
-      dataIndex: "ma_lop",
-      width: 90
+      title: "Thứ",
+      dataIndex: "thu",
+      sorter: (a, b) =>
+        weekdays.indexOf(a.thu) -
+        weekdays.indexOf(b.thu),
     },
     {
-      title: "Tên lớp",
+      title: "Lớp học",
       dataIndex: "ten_lop",
-      render: (name) => <strong>{name}</strong>
-    },
-    {
-      title: "Khóa học",
-      dataIndex: "khoa_hoc"
-    },
-    {
-      title: "Sĩ số mẫu",
-      render: (_, record) =>
-        `${record.hoc_vien.length}/${record.si_so_toi_da}`
-    },
-    {
-      title: "Trạng thái",
-      dataIndex: "trang_thai",
-      render: (status) => (
-        <Tag color={statusColors[status]}>
-          {status}
-        </Tag>
-      )
-    },
-    {
-      title: "Thao tác",
-      key: "actions",
-      render: (_, record) => (
-        <Button
-          type="link"
-          icon={<EyeOutlined />}
-          onClick={() => openDetail(record)}
+      render: (name, record) => (
+        <Tag
+          color={classColors[record.ma_lop] || "blue"}
         >
-          Xem chi tiết
-        </Button>
-      )
-    }
+          {name}
+        </Tag>
+      ),
+    },
+    {
+      title: "Giờ bắt đầu",
+      dataIndex: "gio_bat_dau",
+      sorter: (a, b) =>
+        a.gio_bat_dau.localeCompare(b.gio_bat_dau),
+    },
+    {
+      title: "Giờ kết thúc",
+      dataIndex: "gio_ket_thuc",
+    },
+    {
+      title: "Phòng học",
+      dataIndex: "phong_hoc",
+      render: (room) => (
+        <Space>
+          <EnvironmentOutlined />
+          {room}
+        </Space>
+      ),
+    },
   ];
-
-  const totalStudents = classes.reduce(
-    (sum, item) => sum + item.hoc_vien.length,
-    0
-  );
 
   return (
     <div>
+      {contextHolder}
+
+      {/* Tiêu đề */}
       <div style={{ marginBottom: 24 }}>
         <Typography.Title level={3}>
-          Lớp của tôi
+          Lịch giảng dạy
         </Typography.Title>
 
         <Typography.Text type="secondary">
-          Theo dõi các lớp học được phân công giảng dạy
+          Theo dõi lịch giảng dạy cố định hàng tuần
         </Typography.Text>
       </div>
 
       {/* Thống kê */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+      <Row
+        gutter={[16, 16]}
+        style={{ marginBottom: 24 }}
+      >
         <Col xs={24} md={8}>
-          <Card>
+          <Card loading={loading}>
             <Statistic
-              title="Tổng lớp phụ trách"
-              value={classes.length}
-              prefix={<TeamOutlined />}
+              title="Lớp phụ trách có lịch"
+              value={totalClasses}
+              prefix={<BookOutlined />}
               valueStyle={{ color: "#1677ff" }}
             />
           </Card>
         </Col>
 
         <Col xs={24} md={8}>
-          <Card>
+          <Card loading={loading}>
             <Statistic
-              title="Học viên trong danh sách mẫu"
-              value={totalStudents}
-              prefix={<UserOutlined />}
+              title="Buổi dạy mỗi tuần"
+              value={filteredSchedules.length}
+              prefix={<CalendarOutlined />}
               valueStyle={{ color: "#52c41a" }}
             />
           </Card>
         </Col>
 
         <Col xs={24} md={8}>
-          <Card>
+          <Card loading={loading}>
             <Statistic
-              title="Lớp đang học"
-              value={
-                classes.filter(
-                  (item) => item.trang_thai === "Đang học"
-                ).length
-              }
-              prefix={<CheckCircleOutlined />}
+              title="Giờ dạy mỗi tuần"
+              value={Number(totalHours.toFixed(2))}
+              precision={2}
+              suffix="giờ"
+              prefix={<ClockCircleOutlined />}
               valueStyle={{ color: "#722ed1" }}
             />
           </Card>
         </Col>
       </Row>
 
-      {/* Danh sách lớp */}
+      {/* Thời khóa biểu */}
       <Card>
         <Space
           wrap
           style={{
             display: "flex",
             justifyContent: "space-between",
-            marginBottom: 20
+            marginBottom: 24,
           }}
         >
-          <Input
-            placeholder="Tìm tên lớp hoặc khóa học..."
-            prefix={<SearchOutlined />}
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            style={{ width: 280 }}
-            allowClear
-          />
-
           <Select
-            value={filterStatus}
-            onChange={setFilterStatus}
-            style={{ width: 170 }}
+            value={selectedClass}
+            onChange={setSelectedClass}
+            style={{ width: 230 }}
+            showSearch
+            optionFilterProp="label"
             options={[
-              { value: "all", label: "Tất cả trạng thái" },
-              { value: "Đang học", label: "Đang học" },
-              { value: "Sắp mở", label: "Sắp mở" },
-              { value: "Đã kết thúc", label: "Đã kết thúc" }
+              {
+                value: "all",
+                label: "Tất cả lớp",
+              },
+              ...classOptions,
             ]}
           />
+
+          <Space wrap>
+            <Segmented
+              value={viewMode}
+              onChange={setViewMode}
+              options={[
+                {
+                  label: "Theo tuần",
+                  value: "week",
+                },
+                {
+                  label: "Danh sách",
+                  value: "list",
+                },
+              ]}
+            />
+
+            <Button
+              icon={<ReloadOutlined />}
+              loading={loading}
+              onClick={fetchSchedules}
+            >
+              Làm mới
+            </Button>
+          </Space>
         </Space>
 
-        <Table
-          columns={columns}
-          dataSource={filteredClasses}
-          rowKey="ma_lop"
-          pagination={{ pageSize: 6 }}
-          scroll={{ x: 850 }}
-        />
-      </Card>
-
-      {/* Chi tiết lớp */}
-      <Modal
-        title={
-          selectedClass
-            ? `Chi tiết lớp: ${selectedClass.ten_lop}`
-            : "Chi tiết lớp"
-        }
-        open={detailOpen}
-        onCancel={() => {
-          setDetailOpen(false);
-          setSelectedClass(null);
-        }}
-        footer={null}
-        width={850}
-        destroyOnHidden
-      >
-        {selectedClass && (
-          <Tabs
-            items={[
-              {
-                key: "info",
-                label: "Thông tin lớp",
-                children: (
-                  <Descriptions
-                    bordered
-                    column={1}
-                    size="small"
-                  >
-                    <Descriptions.Item label="Mã lớp">
-                      {selectedClass.ma_lop}
-                    </Descriptions.Item>
-
-                    <Descriptions.Item label="Tên lớp">
-                      {selectedClass.ten_lop}
-                    </Descriptions.Item>
-
-                    <Descriptions.Item label="Khóa học">
-                      {selectedClass.khoa_hoc}
-                    </Descriptions.Item>
-
-                    <Descriptions.Item label="Ngày bắt đầu">
-                      {selectedClass.ngay_bat_dau}
-                    </Descriptions.Item>
-
-                    <Descriptions.Item label="Ngày kết thúc">
-                      {selectedClass.ngay_ket_thuc}
-                    </Descriptions.Item>
-
-                    <Descriptions.Item label="Sĩ số">
-                      {selectedClass.hoc_vien.length}/
-                      {selectedClass.si_so_toi_da}
-                    </Descriptions.Item>
-
-                    <Descriptions.Item label="Trạng thái">
-                      <Tag
-                        color={
-                          statusColors[selectedClass.trang_thai]
-                        }
-                      >
-                        {selectedClass.trang_thai}
-                      </Tag>
-                    </Descriptions.Item>
-                  </Descriptions>
-                )
-              },
-              {
-                key: "students",
-                label: "Danh sách học viên",
-                children: selectedClass.hoc_vien.length ? (
-                  <Table
-                    columns={studentColumns}
-                    dataSource={selectedClass.hoc_vien}
-                    rowKey="ma_hoc_vien"
-                    pagination={{ pageSize: 5 }}
-                    scroll={{ x: 650 }}
-                  />
-                ) : (
-                  <Empty description="Chưa có học viên" />
-                )
-              },
-              {
-                key: "schedule",
-                label: "Lịch học",
-                children: (
-                  <Table
-                    dataSource={selectedClass.lich_hoc}
-                    rowKey={(_, index) => index}
-                    pagination={false}
-                    columns={[
-                      {
-                        title: "Thứ",
-                        dataIndex: "thu"
-                      },
-                      {
-                        title: "Giờ học",
-                        dataIndex: "gio"
-                      },
-                      {
-                        title: "Phòng học",
-                        dataIndex: "phong"
-                      }
-                    ]}
-                  />
-                )
-              }
-            ]}
+        {viewMode === "list" ? (
+          <Table
+            columns={columns}
+            dataSource={filteredSchedules}
+            rowKey="id"
+            loading={loading}
+            pagination={false}
+            scroll={{ x: 650 }}
+            locale={{
+              emptyText: "Chưa có lịch giảng dạy",
+            }}
           />
+        ) : (
+          <Row gutter={[12, 12]}>
+            {weekdays.map((day) => {
+              const daySchedules = filteredSchedules
+                .filter((item) => item.thu === day)
+                .sort((a, b) =>
+                  a.gio_bat_dau.localeCompare(
+                    b.gio_bat_dau
+                  )
+                );
+
+              return (
+                <Col
+                  key={day}
+                  xs={24}
+                  sm={12}
+                  lg={8}
+                  xl={6}
+                >
+                  <Card
+                    size="small"
+                    title={day}
+                    loading={loading}
+                    style={{ height: "100%" }}
+                  >
+                    {daySchedules.length === 0 ? (
+                      <Empty
+                        image={
+                          Empty.PRESENTED_IMAGE_SIMPLE
+                        }
+                        description="Không có lịch dạy"
+                      />
+                    ) : (
+                      daySchedules.map((item) => (
+                        <Card
+                          key={item.id}
+                          size="small"
+                          style={{
+                            marginBottom: 8,
+                            background: "#f5f7ff",
+                            borderLeft:
+                              "3px solid #1677ff",
+                          }}
+                        >
+                          <Tag
+                            color={
+                              classColors[item.ma_lop] ||
+                              "blue"
+                            }
+                          >
+                            {item.ten_lop}
+                          </Tag>
+
+                          <div style={{ marginTop: 10 }}>
+                            <ClockCircleOutlined />{" "}
+                            {item.gio_bat_dau} -{" "}
+                            {item.gio_ket_thuc}
+                          </div>
+
+                          <div style={{ marginTop: 6 }}>
+                            <EnvironmentOutlined />{" "}
+                            {item.phong_hoc}
+                          </div>
+                        </Card>
+                      ))
+                    )}
+                  </Card>
+                </Col>
+              );
+            })}
+          </Row>
         )}
-      </Modal>
+      </Card>
     </div>
   );
 }

@@ -5,7 +5,8 @@ import {
   Avatar,
   Typography,
   Space,
-  Button
+  Button,
+  Modal,
 } from "antd";
 
 import {
@@ -15,13 +16,14 @@ import {
   CheckSquareOutlined,
   FileTextOutlined,
   BookOutlined,
-  LogoutOutlined
+  LogoutOutlined,
+  ExclamationCircleOutlined,
 } from "@ant-design/icons";
 
 import {
   Outlet,
   useLocation,
-  useNavigate
+  useNavigate,
 } from "react-router-dom";
 
 import { useAuth } from "../contexts/AuthContext";
@@ -32,47 +34,68 @@ const menuItems = [
   {
     key: "/teacher",
     icon: <DashboardOutlined />,
-    label: "Tổng quan"
+    label: "Tổng quan",
   },
   {
     key: "/teacher/lop-hoc",
     icon: <TeamOutlined />,
-    label: "Lớp của tôi"
+    label: "Lớp của tôi",
   },
   {
     key: "/teacher/lich-day",
     icon: <CalendarOutlined />,
-    label: "Lịch giảng dạy"
+    label: "Lịch giảng dạy",
   },
   {
     key: "/teacher/diem-danh",
     icon: <CheckSquareOutlined />,
-    label: "Điểm danh"
+    label: "Điểm danh",
   },
   {
     key: "/teacher/diem",
     icon: <FileTextOutlined />,
-    label: "Quản lý điểm"
+    label: "Quản lý điểm",
   },
   {
     key: "/teacher/tai-lieu",
     icon: <BookOutlined />,
-    label: "Tài liệu"
-  }
+    label: "Tài liệu",
+  },
 ];
 
 export default function TeacherLayout() {
   const navigate = useNavigate();
   const location = useLocation();
+
   const { user, logout } = useAuth();
 
+  // Modal xác nhận đăng xuất
+  const [modal, contextHolder] = Modal.useModal();
+
   const handleLogout = () => {
-    logout();
-    navigate("/login", { replace: true });
+    modal.confirm({
+      title: "Xác nhận đăng xuất",
+      icon: <ExclamationCircleOutlined />,
+
+      content:
+        "Bạn có chắc chắn muốn đăng xuất khỏi hệ thống không?",
+
+      okText: "Đăng xuất",
+      okType: "danger",
+      cancelText: "Hủy",
+      centered: true,
+
+      onOk: () => {
+        logout();
+        navigate("/login", { replace: true });
+      },
+    });
   };
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
+      {contextHolder}
+
       <Sider
         width={240}
         breakpoint="lg"
@@ -81,6 +104,7 @@ export default function TeacherLayout() {
       >
         <div className="sidebar-logo">
           <div className="logo-icon">E</div>
+
           <div>
             <strong>EduCenter</strong>
             <small>Teacher Portal</small>
@@ -95,7 +119,7 @@ export default function TeacherLayout() {
           onClick={({ key }) => navigate(key)}
           style={{
             background: "#0F172A",
-            border: "none"
+            border: "none",
           }}
         />
       </Sider>
@@ -107,7 +131,7 @@ export default function TeacherLayout() {
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
-            gap: 16
+            gap: 16,
           }}
         >
           <Typography.Text strong>
@@ -116,10 +140,15 @@ export default function TeacherLayout() {
 
           <Space size="large">
             <Space>
-              <Avatar style={{ background: "#1677FF" }}>
+              <Avatar
+                style={{ background: "#1677FF" }}
+              >
                 {user?.name?.charAt(0) || "G"}
               </Avatar>
-              <span>{user?.name || "Giáo viên"}</span>
+
+              <span>
+                {user?.name || "Giáo viên"}
+              </span>
             </Space>
 
             <Button

@@ -1,5 +1,6 @@
 
 import { useState } from "react";
+
 import {
   useNavigate,
   Navigate,
@@ -28,6 +29,8 @@ export default function Login() {
   const { user, login } = useAuth();
   const navigate = useNavigate();
 
+  const [form] = Form.useForm();
+
   const [loginError, setLoginError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -40,6 +43,9 @@ export default function Login() {
         values.username,
         values.password
       );
+
+      // Xóa dữ liệu nhập sau khi đăng nhập thành công
+      form.resetFields();
 
       const destination =
         roleHome[loggedInUser.role] || "/";
@@ -129,10 +135,15 @@ export default function Login() {
         </div>
 
         <Form
+          form={form}
           layout="vertical"
           onFinish={handleLogin}
           onValuesChange={() => setLoginError("")}
           autoComplete="off"
+          initialValues={{
+            username: "",
+            password: "",
+          }}
           size="large"
         >
           <Form.Item
@@ -148,6 +159,7 @@ export default function Login() {
             <Input
               prefix={<UserOutlined />}
               placeholder="Nhập tên đăng nhập"
+              autoComplete="off"
             />
           </Form.Item>
 
@@ -164,6 +176,7 @@ export default function Login() {
             <Input.Password
               prefix={<LockOutlined />}
               placeholder="Nhập mật khẩu"
+              autoComplete="off"
             />
           </Form.Item>
 

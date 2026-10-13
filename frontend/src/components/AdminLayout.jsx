@@ -5,7 +5,8 @@ import {
   Avatar,
   Typography,
   Space,
-  Button
+  Button,
+  Modal,
 } from "antd";
 
 import {
@@ -15,15 +16,15 @@ import {
   BookOutlined,
   BankOutlined,
   BarChartOutlined,
-  BellOutlined,
   CalendarOutlined,
-  LogoutOutlined
+  LogoutOutlined,
+  ExclamationCircleOutlined,
 } from "@ant-design/icons";
 
 import {
   Outlet,
   useLocation,
-  useNavigate
+  useNavigate,
 } from "react-router-dom";
 
 import { useAuth } from "../contexts/AuthContext";
@@ -34,52 +35,75 @@ const menuItems = [
   {
     key: "/",
     icon: <DashboardOutlined />,
-    label: "Tổng quan"
+    label: "Tổng quan",
   },
   {
     key: "/hoc-vien",
     icon: <TeamOutlined />,
-    label: "Học viên"
+    label: "Học viên",
   },
   {
     key: "/giao-vien",
     icon: <UserOutlined />,
-    label: "Giáo viên"
+    label: "Giáo viên",
   },
   {
     key: "/khoa-hoc",
     icon: <BookOutlined />,
-    label: "Khóa học"
+    label: "Khóa học",
   },
   {
     key: "/lop-hoc",
     icon: <BankOutlined />,
-    label: "Lớp học"
+    label: "Lớp học",
   },
   {
     key: "/lich-hoc",
     icon: <CalendarOutlined />,
-    label: "Lịch học"
+    label: "Lịch học",
   },
   {
     key: "/thong-ke",
     icon: <BarChartOutlined />,
-    label: "Thống kê"
-  }
+    label: "Thống kê",
+  },
 ];
 
 export default function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
+
   const { user, logout } = useAuth();
 
+  const [modal, contextHolder] = Modal.useModal();
+
+  // Hiển thị xác nhận trước khi đăng xuất
   const handleLogout = () => {
-    logout();
-    navigate("/login", { replace: true });
+    modal.confirm({
+      title: "Xác nhận đăng xuất",
+      icon: <ExclamationCircleOutlined />,
+
+      content:
+        "Bạn có chắc chắn muốn đăng xuất khỏi hệ thống không?",
+
+      okText: "Đăng xuất",
+      okType: "danger",
+
+      cancelText: "Hủy",
+
+      centered: true,
+
+      onOk: () => {
+        logout();
+        navigate("/login", { replace: true });
+      },
+    });
   };
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
+      {contextHolder}
+
       {/* SIDEBAR */}
       <Sider
         width={240}
@@ -104,7 +128,7 @@ export default function AdminLayout() {
           onClick={({ key }) => navigate(key)}
           style={{
             background: "#0F172A",
-            border: "none"
+            border: "none",
           }}
         />
       </Sider>
@@ -118,7 +142,7 @@ export default function AdminLayout() {
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            gap: 16
+            gap: 16,
           }}
         >
           <Typography.Text strong>
@@ -126,12 +150,6 @@ export default function AdminLayout() {
           </Typography.Text>
 
           <Space size="large">
-            <BellOutlined
-              style={{
-                fontSize: 19,
-                cursor: "pointer"
-              }}
-            />
 
             <Space>
               <Avatar
@@ -140,7 +158,9 @@ export default function AdminLayout() {
                 {user?.name?.charAt(0) || "A"}
               </Avatar>
 
-              <span>{user?.name || "Quản trị viên"}</span>
+              <span>
+                {user?.name || "Quản trị viên"}
+              </span>
             </Space>
 
             <Button

@@ -1,70 +1,18 @@
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+
 import {
-  Card,
-  Row,
-  Col,
-  Statistic,
-  Typography,
-  Select,
-  Table,
-  InputNumber,
-  Button,
-  Space,
-  Tag,
-  Alert,
-  message,
-  Popconfirm
+  Card, Row, Col, Statistic, Typography,
+  Select, Table, InputNumber, Button, Space,
+  Tag, Alert, message, Popconfirm, Empty
 } from "antd";
 
 import {
-  BookOutlined,
-  CheckCircleOutlined,
-  EditOutlined,
-  SaveOutlined,
-  ReloadOutlined
+  BookOutlined, CheckCircleOutlined,
+  EditOutlined, SaveOutlined, ReloadOutlined
 } from "@ant-design/icons";
 
-// Dữ liệu mẫu - đồng nhất với trang Điểm danh
-const classes = [
-  {
-    ma_lop: 1,
-    ten_lop: "Giao tiếp A01",
-    khoa_hoc: "Tiếng Anh giao tiếp cơ bản",
-    students: [
-      { ma_xep_lop: 101, ma_hoc_vien: 1, ho_ten: "Nguyễn Văn An" },
-      { ma_xep_lop: 102, ma_hoc_vien: 2, ho_ten: "Trần Thị Bình" },
-      { ma_xep_lop: 103, ma_hoc_vien: 3, ho_ten: "Lê Minh Đức" },
-      { ma_xep_lop: 104, ma_hoc_vien: 4, ho_ten: "Phạm Thị Hoa" }
-    ]
-  },
-  {
-    ma_lop: 2,
-    ten_lop: "IELTS 5.5 - A01",
-    khoa_hoc: "Luyện thi IELTS 5.5",
-    students: [
-      { ma_xep_lop: 201, ma_hoc_vien: 5, ho_ten: "Hoàng Gia Huy" },
-      { ma_xep_lop: 202, ma_hoc_vien: 6, ho_ten: "Đỗ Thu Trang" },
-      { ma_xep_lop: 203, ma_hoc_vien: 7, ho_ten: "Bùi Minh Khang" }
-    ]
-  }
-];
-
-const STORAGE_KEY = "teacher_grades_demo";
-
-function loadSavedGrades() {
-  try {
-    const data = JSON.parse(
-      localStorage.getItem(STORAGE_KEY) || "{}"
-    );
-
-    return data && typeof data === "object" && !Array.isArray(data)
-      ? data
-      : {};
-  } catch {
-    return {};
-  }
-}
+import teacherGradeService from "../../services/teacherGradeService";
 
 function getClassification(score) {
   if (score === null || score === undefined) {
@@ -86,25 +34,110 @@ function getClassification(score) {
   return { text: "Chưa đạt", color: "red" };
 }
 
+function getErrorMessage(error) {
+  const detail = error?.response?.data?.detail;
+
+  if (typeof detail === "string") return detail;
+
+  if (Array.isArray(detail)) {
+    return detail.map((item) => item.msg).join("; ");
+  }
+
+  if (error?.response?.status === 401) {
+    return "Phiên đăng nhập đã hết hạn.";
+  }
+
+  if (error?.response?.status === 403) {
+    return "Bạn không có quyền sửa điểm lớp này.";
+  }
+
+  return "Không thể kết nối đến máy chủ.";
+}
+
 export default function Grades() {
   const [messageApi, contextHolder] = message.useMessage();
 
-  const [selectedClassId, setSelectedClassId] = useState(1);
+  const [classes, setClasses] = useState([]);
+  const [selectedClassId, setSelectedClassId] = useState(null);
 
-  const [savedGrades, setSavedGrades] =
-    useState(loadSavedGrades);
-
+  const [students, setStudents] = useState([]);
+  const [savedGrades, setSavedGrades] = useState({});
   const [draftGrades, setDraftGrades] = useState({});
 
   const [editing, setEditing] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const selectedClass = classes.find(
     (item) => item.ma_lop === selectedClassId
   );
 
-  const students = selectedClass?.students || [];
+  // 1. Lấy danh sách lớp được phân công
+  const fetchClasses = useCallback(async () => {
+    try {
+      const data = await teacherGradeService.getClasses();
 
-  // Chỉ lấy điểm thuộc lớp đang chọn
+      setClasses(data || []);
+
+      setSelectedClassId((previous) => {
+        if (data.some((item) => item.ma_lop === previous)) {
+          return previous;
+        }
+
+        return data[0]?.ma_lop ?? null;
+      });
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    }
+  }, [messageApi]);
+
+  useEffect(() => {
+    fetchClasses();
+  }, [fetchClasses]);
+
+  // 2. Lấy điểm từ MySQL
+  const fetchGrades = useCallback(async () => {
+    if (!selectedClassId) {
+      setStudents([]);
+      setSavedGrades({});
+      setDraftGrades({});
+      setEditing(false);
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const data = await teacherGradeService.getGrades(
+        selectedClassId
+      );
+
+      const grades = {};
+
+      (data.items || []).forEach((student) => {
+        grades[student.ma_xep_lop] = student.diem_tong_ket;
+      });
+
+      setStudents(data.items || []);
+      setSavedGrades(grades);
+      setDraftGrades({});
+      setEditing(false);
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+      setStudents([]);
+      setSavedGrades({});
+      setDraftGrades({});
+      setEditing(false);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedClassId, messageApi]);
+
+  useEffect(() => {
+    fetchGrades();
+  }, [fetchGrades]);
+
+  // 3. Ghép điểm đã lưu với bản nháp
   const gradeRows = useMemo(() => {
     return students.map((student) => {
       const key = String(student.ma_xep_lop);
@@ -118,11 +151,12 @@ export default function Grades() {
 
       return {
         ...student,
-        diem_tong_ket: score
+        diem_tong_ket: score,
       };
     });
   }, [students, savedGrades, draftGrades]);
 
+  // 4. Thống kê
   const gradedStudents = gradeRows.filter(
     (item) => item.diem_tong_ket !== null
   );
@@ -138,10 +172,11 @@ export default function Grades() {
     (item) => item.diem_tong_ket >= 5
   ).length;
 
+  // 5. Nhập điểm
   const handleScoreChange = (studentId, value) => {
-    setDraftGrades((prev) => ({
-      ...prev,
-      [studentId]: value
+    setDraftGrades((previous) => ({
+      ...previous,
+      [studentId]: value,
     }));
   };
 
@@ -151,7 +186,8 @@ export default function Grades() {
     setEditing(false);
   };
 
-  const handleSave = () => {
+  // 6. Lưu các điểm được chỉnh sửa
+  const handleSave = async () => {
     const invalid = Object.values(draftGrades).some(
       (value) =>
         value !== null &&
@@ -168,29 +204,32 @@ export default function Grades() {
       return;
     }
 
-    const updated = { ...savedGrades };
+    const records = Object.entries(draftGrades).map(
+      ([key, value]) => ({
+        ma_xep_lop: Number(key),
+        diem_tong_ket: value,
+      })
+    );
 
-    Object.entries(draftGrades).forEach(([key, value]) => {
-      if (value === null) {
-        delete updated[key];
-      } else {
-        updated[key] = value;
-      }
-    });
+    if (!records.length) {
+      setEditing(false);
+      return;
+    }
+
+    setSaving(true);
 
     try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(updated)
+      await teacherGradeService.saveGrades(
+        selectedClassId,
+        records
       );
 
-      setSavedGrades(updated);
-      setDraftGrades({});
-      setEditing(false);
-
       messageApi.success("Lưu điểm thành công!");
-    } catch {
-      messageApi.error("Không thể lưu điểm trên trình duyệt");
+      await fetchGrades();
+    } catch (error) {
+      messageApi.error(getErrorMessage(error));
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -203,17 +242,17 @@ export default function Grades() {
     {
       title: "STT",
       width: 70,
-      render: (_, __, index) => index + 1
+      render: (_, __, index) => index + 1,
     },
     {
       title: "Mã học viên",
       dataIndex: "ma_hoc_vien",
-      width: 130
+      width: 130,
     },
     {
       title: "Họ và tên",
       dataIndex: "ho_ten",
-      render: (name) => <strong>{name}</strong>
+      render: (name) => <strong>{name}</strong>,
     },
     {
       title: "Điểm tổng kết",
@@ -227,23 +266,20 @@ export default function Grades() {
             step={0.25}
             value={record.diem_tong_ket}
             onChange={(value) =>
-              handleScoreChange(
-                record.ma_xep_lop,
-                value
-              )
+              handleScoreChange(record.ma_xep_lop, value)
             }
             placeholder="Nhập điểm"
             style={{ width: 125 }}
           />
         ) : record.diem_tong_ket !== null ? (
           <Typography.Text strong>
-            {record.diem_tong_ket.toFixed(2)}
+            {Number(record.diem_tong_ket).toFixed(2)}
           </Typography.Text>
         ) : (
           <Typography.Text type="secondary">
             Chưa nhập
           </Typography.Text>
-        )
+        ),
     },
     {
       title: "Xếp loại",
@@ -257,7 +293,7 @@ export default function Grades() {
             {result.text}
           </Tag>
         );
-      }
+      },
     },
     {
       title: "Kết quả",
@@ -273,14 +309,15 @@ export default function Grades() {
         ) : (
           <Tag color="error">Chưa đạt</Tag>
         );
-      }
-    }
+      },
+    },
   ];
 
   return (
     <div>
       {contextHolder}
 
+      {/* Tiêu đề */}
       <div style={{ marginBottom: 24 }}>
         <Typography.Title level={3}>
           Quản lý điểm
@@ -291,6 +328,7 @@ export default function Grades() {
         </Typography.Text>
       </div>
 
+      {/* Chọn lớp và khóa học */}
       <Card style={{ marginBottom: 20 }}>
         <Space wrap size="large">
           <div>
@@ -304,9 +342,10 @@ export default function Grades() {
                 onChange={handleClassChange}
                 disabled={editing}
                 style={{ width: 260 }}
+                placeholder="Chọn lớp học"
                 options={classes.map((item) => ({
                   value: item.ma_lop,
-                  label: item.ten_lop
+                  label: item.ten_lop,
                 }))}
               />
             </div>
@@ -318,17 +357,25 @@ export default function Grades() {
             </Typography.Text>
 
             <div style={{ marginTop: 8 }}>
-              <Tag color="blue">
-                {selectedClass?.khoa_hoc}
-              </Tag>
+              {selectedClass ? (
+                <Tag color="blue">
+                  {selectedClass.khoa_hoc}
+                </Tag>
+              ) : (
+                <Tag>Chưa chọn lớp</Tag>
+              )}
             </div>
           </div>
         </Space>
       </Card>
 
-      <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
+      {/* Thống kê */}
+      <Row
+        gutter={[16, 16]}
+        style={{ marginBottom: 20 }}
+      >
         <Col xs={12} md={6}>
-          <Card>
+          <Card loading={loading}>
             <Statistic
               title="Tổng học viên"
               value={students.length}
@@ -338,7 +385,7 @@ export default function Grades() {
         </Col>
 
         <Col xs={12} md={6}>
-          <Card>
+          <Card loading={loading}>
             <Statistic
               title="Đã có điểm"
               value={gradedStudents.length}
@@ -349,18 +396,20 @@ export default function Grades() {
         </Col>
 
         <Col xs={12} md={6}>
-          <Card>
+          <Card loading={loading}>
             <Statistic
               title="Điểm trung bình"
               value={averageScore ?? "—"}
-              precision={averageScore === null ? undefined : 2}
+              precision={
+                averageScore === null ? undefined : 2
+              }
               valueStyle={{ color: "#722ed1" }}
             />
           </Card>
         </Col>
 
         <Col xs={12} md={6}>
-          <Card>
+          <Card loading={loading}>
             <Statistic
               title="Học viên đạt"
               value={passedStudents}
@@ -370,6 +419,7 @@ export default function Grades() {
         </Col>
       </Row>
 
+      {/* Trạng thái chỉnh sửa */}
       {editing && (
         <Alert
           type="info"
@@ -379,8 +429,13 @@ export default function Grades() {
         />
       )}
 
+      {/* Bảng điểm */}
       <Card
-        title={`Bảng điểm - ${selectedClass?.ten_lop}`}
+        title={
+          `Bảng điểm - ${
+            selectedClass?.ten_lop || "Chưa chọn lớp"
+          }`
+        }
         extra={
           <Space wrap>
             {!editing ? (
@@ -388,6 +443,7 @@ export default function Grades() {
                 type="primary"
                 icon={<EditOutlined />}
                 onClick={() => setEditing(true)}
+                disabled={!students.length || loading}
               >
                 Nhập / Sửa điểm
               </Button>
@@ -396,20 +452,23 @@ export default function Grades() {
                 <Button
                   icon={<ReloadOutlined />}
                   onClick={handleCancel}
+                  disabled={saving}
                 >
                   Hủy
                 </Button>
 
                 <Popconfirm
                   title="Xác nhận lưu bảng điểm?"
-                  description="Điểm đã nhập sẽ được lưu vào dữ liệu mẫu."
+                  description="Các điểm được chỉnh sửa sẽ lưu vào MySQL."
                   onConfirm={handleSave}
                   okText="Lưu"
                   cancelText="Hủy"
+                  disabled={saving}
                 >
                   <Button
                     type="primary"
                     icon={<SaveOutlined />}
+                    loading={saving}
                   >
                     Lưu điểm
                   </Button>
@@ -419,17 +478,22 @@ export default function Grades() {
           </Space>
         }
       >
-        <Table
-          columns={columns}
-          dataSource={gradeRows}
-          rowKey="ma_xep_lop"
-          pagination={false}
-          scroll={{ x: 850 }}
-        />
+        {classes.length === 0 && !loading ? (
+          <Empty description="Chưa có lớp được phân công" />
+        ) : (
+          <Table
+            columns={columns}
+            dataSource={gradeRows}
+            rowKey="ma_xep_lop"
+            loading={loading}
+            pagination={false}
+            scroll={{ x: 850 }}
+          />
+        )}
 
         <Typography.Text type="secondary">
           Thang điểm: 0–10. Ngưỡng đạt 5.0 và các mức xếp loại
-          hiện là quy ước hiển thị mẫu, có thể điều chỉnh theo
+          hiện là quy ước hiển thị, có thể điều chỉnh theo
           quy định của trung tâm.
         </Typography.Text>
       </Card>
